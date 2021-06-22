@@ -91,7 +91,10 @@ Record model_laws {Sig : sig}(m : model_data Sig) :=
                            substitution
                              (fun x => if x <? n then variables m x else
                                          substitution (fun p => variables m (p + n)) (f (x - n)))) v)
-              (* missing laws: associativity of substitution *)
+    (* missing laws: associativity of substitution *) ;
+    assoc : forall (f g : nat -> m) (x : m),
+        substitution f (substitution g x) = substitution (fun n => substitution f (g n)) x ;
+    id_neutral : forall (x : m), substitution (variables m) x = x
   }.
 
 Record model (Sig : sig) :=
@@ -225,7 +228,10 @@ Proof.
     intro.
     rewrite Z_ren_subst_eq.
     reflexivity.
-Qed.
+  - admit.
+  - admit.
+
+Admitted.
 
 Definition ZModel (Sig : sig) : model Sig :=
   {| data := Z_model_data Sig; laws := Z_model_laws Sig |}.
