@@ -8,18 +8,32 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* Class has_substitution (X : Type) := substitution : (nat -> X) -> (X -> X). *)
-(* Notation "x [ s ]" := (substitution s x) (at level 30). *)
 
 (* substitution in a model *)
 Reserved Notation "x [ s ]" (at level 30).
 (* substitution in the syntax *)
 Reserved Notation "x [ s ]ₛ" (at level 30).
+(* mixed substitution in the syntax *)
+Reserved Notation "x ⟦ s ⟧" (at level 30).
 
+Declare Scope signature_scope.
 
 Record signature :=
   { O  : Type;
     ar : O -> list nat}.
+
+Arguments O _%signature_scope.
+
+Definition sum_of_signatures (S1 : signature)(S2 : signature) : signature :=
+  {| O := O S1 + O S2 ;
+     ar := fun o =>
+             match o with
+               inl o' => ar o'
+               | inr o' => ar o'
+               end
+  |}.
+
+Infix "+"  := sum_of_signatures : signature_scope.
 
 Inductive O_LC := App | Abs.
 
@@ -41,6 +55,7 @@ Inductive Z (S : signature) : Type :=
   Var : nat -> Z S
 | Op : forall (o : O S), Vec (Z S) (ar o) (* this is Z^(length ar) *) -> Z S.
 
+Arguments Z S%signature_scope.
 Arguments Op [S] o.
 
 Definition Vec_map {A B C : Type}(f : A -> B -> C) :=
@@ -158,17 +173,29 @@ Notation "x [ s ]" := (substitution s x).
 Notation "↑" := (shiftₛ (variables _) (substitution (m := _))).
 (* Existing Instance has_subst . *)
 
+(*
+Definition ops_subst_law {S : signature} (m : model_data S) : Type :=
+     forall (o : O S) (v : Vec m (ar o)) (f : nat -> m),
+          (ops o v) [ f ] =
+          ops o (Vec_map
+                        (fun n t =>
+                           (* substitution (shiftₛ (variables m) substitution n f)) *)
+                           (* substitution (shiftₛ (variables m) (substitution (m := m)) n f) *)
+                           t [ ↑ n f ]
+                        )
+              v).
+*)
+
 Record model_laws {S : signature}(m : model_data S) :=
   {
     (* fun ext for substitution *)
     substitution_ext : forall (f g : nat -> m),  (forall n, f n = g n) -> forall x,
                                     x [ f ] = x [ g ] ;
-    variables_eq : forall x f, (variables m x) [ f ] = f x;
+    variables_subst : forall x f, (variables m x) [ f ] = f x;
     (* operations are module morphisms *)
-    ops_eq : forall (o : O S)
-               (v : Vec m (ar o))
-               (f : nat -> m),
-          substitution f (ops o v) =
+    ops_subst : 
+     forall (o : O S) (v : Vec m (ar o)) (f : nat -> m),
+          (ops o v) [ f ] =
           ops o (Vec_map
                         (fun n t =>
                            (* substitution (shiftₛ (variables m) substitution n f)) *)
@@ -188,7 +215,9 @@ Record model (S : signature) :=
     laws : model_laws data
   }.
 
-Record model_mor {S : signature} (X : model S) (Y : model S) :=
+Arguments model S%signature_scope.
+
+Record model_mor {S : signature} (X : model_data S) (Y : model_data S) :=
   { carrier_mor :> X -> Y ;
     variables_mor : forall n, carrier_mor (variables X n) = variables Y n ;
     substitution_mor : forall (f : nat -> X) (x : X), carrier_mor (x [ f ]) =
@@ -252,9 +281,9 @@ Fixpoint ZModel_unique_ren (S : signature) (s : (nat -> Z S) -> Z S -> Z S)
 Proof.
   intros.
   destruct z.
-  - apply (variables_eq s_laws).
+  - apply (variables_subst s_laws).
   - etransitivity.
-    apply (ops_eq s_laws).
+    apply (ops_subst s_laws).
     cbn.
     f_equal.
     apply vec_map_fun_ext.
@@ -264,7 +293,7 @@ Proof.
        intro n.
        etransitivity;[symmetry; apply var_shiftₙ|].
        intros.
-       exact (variables_eq s_laws _ _).
+       exact (variables_subst s_laws _ _).
        reflexivity.
     }
     apply (ZModel_unique_ren _ _ s_laws).
@@ -280,9 +309,9 @@ Fixpoint ZModel_unique_subst (S : signature) (s : (nat -> Z S) -> Z S -> Z S)
 Proof.
   intros.
   destruct z.
-  - apply (variables_eq s_laws).
+  - apply (variables_subst s_laws).
   - etransitivity.
-    apply (ops_eq s_laws).
+    apply (ops_subst s_laws).
     cbn.
     f_equal.
     apply vec_map_fun_ext.
@@ -301,8 +330,8 @@ Lemma Z_model_laws (S : signature) : model_laws (Z_model_data S).
 Proof.
   repeat split.
   - exact Z_subst_ext.
-  - cbn.
-    intros o v f.
+  - intros o v f.
+    cbn.
     f_equal.
     apply vec_map_fun_ext.
     intros.
@@ -321,7 +350,7 @@ Definition ZModel (S : signature) : model S :=
 
 (* the initial morphism *)
 
-Fixpoint ini_mor {S : signature} (m : model S )(x : Z S) : m :=
+Fixpoint ini_mor {S : signature} (m : model_data S )(x : Z S) : m :=
   match x with
         Var _ n => variables _ n
       | Op o v   => ops o (Vec_map (fun _ => ini_mor m) v)
@@ -332,10 +361,10 @@ Fixpoint mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
   ini_mor m (Z_ren f x) = (ini_mor m x) [ variables m ∘ f ].
   destruct x as [n|o v].
   - cbn.
-    rewrite (variables_eq (laws m)).
+    rewrite (variables_subst (laws m)).
     reflexivity.
   - cbn -[leb].
-    rewrite (ops_eq (laws m)).
+    rewrite (ops_subst (laws m)).
     repeat rewrite vec_map_map.
     cbn -[leb].
     apply f_equal.
@@ -353,7 +382,7 @@ Fixpoint mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
         apply var_shiftₙ.
         cbn.
         intros.
-        rewrite (variables_eq (laws m)).
+        rewrite (variables_subst (laws m)).
         reflexivity.
 Defined.
 
@@ -364,10 +393,10 @@ Fixpoint mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
   ini_mor m (x [ f ]ₛ) = (ini_mor m x) [ ini_mor m ∘ f].
   destruct x as [n|o v].
   - cbn.
-    rewrite (variables_eq (laws m)).
+    rewrite (variables_subst (laws m)).
     reflexivity.
   - cbn -[leb].
-    rewrite (ops_eq (laws m)).
+    rewrite (ops_subst (laws m)).
     repeat rewrite vec_map_map.
     cbn -[leb].
     apply f_equal.
@@ -396,8 +425,8 @@ Next Obligation.
   apply mor_subst.
 Qed.
 
-Fixpoint initial_morphism_unique {S : signature}(m : model S) (f : model_mor (ZModel S) m)
-     x : f x = initial_morphism m x. 
+Fixpoint initial_morphism_unique {S : signature}(m : model_data S) (f : model_mor (ZModel S) m)
+     x : f x = ini_mor m x. 
 Proof.
   destruct x.
   - apply variables_mor.
@@ -409,3 +438,406 @@ Proof.
     intros.
     apply initial_morphism_unique.
 Qed.
+
+Record half_equation (S1 : signature)(S2 : signature) :=
+  {
+    lift_ops :> forall (m : model S1), forall (o : O S2), Vec m (ar o) -> m;
+    lift_ops_subst :
+           forall (m : model S1) (o : O S2) (v : Vec m (ar o)) (f : nat -> m),
+          (lift_ops (o := o) v) [ f ] =
+          lift_ops (o := o) (Vec_map
+                        (fun n t => t [ ↑ n f ])
+              v) ;
+    lift_ops_natural : forall (m1 m2 : model S1) (f : model_mor m1 m2)
+                         (o : O S2)(v : Vec m1 (ar o)),
+        lift_ops (Vec_map (fun _ => f) v)  = f (lift_ops v)
+                
+  }.
+
+Arguments lift_ops [S1 S2] h [m] o.
+
+Record equational_theory :=
+  { metavariables : signature ;
+    main_signature : signature ;
+    left_handside : half_equation main_signature metavariables ;
+    right_handside : half_equation main_signature metavariables 
+  }.
+
+Record model_equational (E : equational_theory) :=
+  { main_model :> model (main_signature E) ;
+    model_eq : forall o (v : Vec main_model (ar o)),
+        left_handside E main_model o v = right_handside E main_model o v
+  }.
+
+(* version avec quotietns *)
+Require Import Quot.
+
+Section relvec.
+
+  Context (A B : Type)(R : B -> B -> Prop) .
+Inductive rel_vec : forall (l : list A),
+    Vec B l -> Vec B l -> Prop :=
+  nil_rel_vec :  rel_vec  (NilV _) (NilV _)
+| cons_rel_vec : forall n l t t' v v', rel_vec (l := l)  v v' -> R t t' -> rel_vec (ConsV n t v)(ConsV n t' v').
+
+Lemma rel_vec_rfl (rx : forall x, R x x) l (v : Vec B l) : rel_vec v v.
+  induction v.
+  - constructor.
+  - constructor; auto.
+Qed.
+  End relvec.
+
+Fixpoint vec_quot_out (A B C : Type)(R : Eqv B)(l : list A)(f : Vec B l -> C)
+      (compat_f : forall b b', rel_vec R b b' -> f b = f b')
+      (v : Vec (B // R) l) : C.
+  destruct v as [|a l b v].
+  - exact (f (NilV _)).
+  - cbn.
+    revert v b.
+    unshelve refine (vec_quot_out _ _ _ _ _ _  _).
+    +  intros v b.
+       revert b v.
+       unshelve refine (factor R _ _).
+        * exact (fun b v => f (ConsV a b v )).
+        * intros b b' r.
+          cbn.
+          apply extensionality.
+          intro v.
+          apply compat_f.
+          --  apply cons_rel_vec.
+              ++ apply rel_vec_rfl, eqv_rfl.
+              ++ assumption.
+    + intros v v' rb.
+      cbn.
+      apply extensionality.
+      apply class_ind.
+      intro b.
+      cbn.
+      rewrite factorize.
+      apply compat_f.
+      constructor.
+      * assumption.
+      * apply eqv_rfl.
+Defined.
+
+Fixpoint vec_quot_out_proj (A B C : Type)(R : Eqv B)(l : list A)(f : Vec B l -> C)
+      (compat_f : forall b b', rel_vec R b b' -> f b = f b')
+      (v : Vec B l) :
+  vec_quot_out compat_f (Vec_map (fun _ => class R) v) = f v.
+Proof.
+  destruct v.
+  - reflexivity.
+  - cbn.
+    rewrite vec_quot_out_proj.
+    rewrite factorize.
+    reflexivity.
+Qed.
+
+
+Inductive rel_Z (E : equational_theory) : Z (main_signature E) -> Z (main_signature E) -> Prop :=
+| eqE : forall o v, rel_Z (left_handside E (ZModel _) o v) (right_handside E (ZModel _) o v) 
+| reflE : forall z, rel_Z z z
+| symE : forall a b, rel_Z b a -> rel_Z a b
+| transE : forall a b c, rel_Z a b -> rel_Z b c -> rel_Z a c
+| congrE : forall (o : O (main_signature E)) (v v' : Vec _ (ar o)),
+    rel_vec (@rel_Z E)  v v' -> rel_Z (Op o v) (Op o v').
+(* with rel_Zv(E : equational_theory) : forall (l : list nat) , *)
+(*     Vec  (Z (main_signature E)) l -> Vec  (Z (main_signature E)) l -> Prop := *)
+(*   nilE :  rel_Zv  (NilV _) (NilV _) *)
+(* | consE : forall n l t t' v v', rel_Zv (l := l)  v v' -> rel_Z t t' -> rel_Zv (ConsV n t v)(ConsV n t' v'). *)
+
+                        (*
+Scheme tree_forest_rec := Induction for rel_Z Sort Prop
+                                    with foest_tree_rec := Induction for rel_Zv Sort Prop.
+
+Lemma rel_Z_ind' [E : equational_theory] [P : forall z z0 : Z (main_signature E), rel_Z z z0 -> Prop]
+  [P0 : forall (l : list nat) (v v0 : Vec (Z (main_signature E)) l), rel_Zv v v0 -> Prop]
+(hlr : forall (o : O (metavariables E)) (v : Vec (ZModel (main_signature E)) (ar o)),
+ P (left_handside E (ZModel (main_signature E)) o v) (right_handside E (ZModel (main_signature E)) o v) (eqE v)) 
+(hrfl : forall z : Z (main_signature E), P z z (reflE z)) 
+(hsym : forall (a b : Z (main_signature E)) (r : rel_Z b a), P b a r -> P a b (symE r)) 
+(htrans : forall (a b c : Z (main_signature E)) (r : rel_Z a b),
+ P a b r -> forall r0 : rel_Z b c, P b c r0 -> P a c (transE r r0)) 
+(hnil : forall (o : O (main_signature E)) (v v' : Vec (Z (main_signature E)) (ar o)) (r : rel_Zv v v'),
+ P0 (ar o) v v' r -> P (Op o v) (Op o v') (congrE r)) :
+P0 nil (NilV (Z (main_signature E))) (NilV (Z (main_signature E))) (nilE E) ->
+(forall (n : nat) (l : list nat) (t t' : Z (main_signature E)) (v v' : Vec (Z (main_signature E)) l)
+   (r : rel_Zv v v'),
+ P0 l v v' r -> forall r0 : rel_Z t t', P t t' r0 -> P0 (n :: l) (ConsV n t v) (ConsV n t' v') (consE n r r0)) ->
+forall (z z0 : Z (main_signature E)) (r : rel_Z z z0), P z z0 r.
+*)
+
+
+
+Definition ZEr (E : equational_theory) : Eqv (Z (main_signature E)) :=
+  Build_Eqv (@rel_Z E) (@reflE E) (@symE E)(@transE E) .
+
+
+Definition ZE(E : equational_theory) := Z (main_signature E) // (ZEr E).
+
+Definition  projE{E : equational_theory} (z : Z (main_signature E)) : ZE E :=
+  z / ZEr E.
+
+Definition ZE_ops (E : equational_theory) (o : O (main_signature E)) (v : Vec (ZE E) (ar o)) :
+  ZE E.
+  revert v.
+  unshelve eapply (vec_quot_out).
+  - intro v.
+    apply projE.
+    revert v.
+    apply Op.
+  - intro v.
+    cbn.
+    intros v' rv.
+    apply class_eq.
+    apply congrE.
+    assumption.
+Defined.
+
+Lemma ZE_ops_projE (E : equational_theory)
+       (o : O (main_signature E)) (v : Vec (Z (main_signature E)) (ar o)) :
+  ZE_ops (Vec_map (fun _ => projE) v) = projE (Op o v).
+
+Proof.
+  apply vec_quot_out_proj.
+Qed.
+
+Lemma lift_ops_Z_ren {S V : signature} (h : half_equation S V)
+   (f : nat -> nat) (o : O V) v :
+  Z_ren f (h (ZModel S) o v) = h (ZModel S) o (Vec_map (fun n t => Z_ren (shiftₙ n f) t) v).
+Proof.
+  etransitivity ; [apply Z_ren_subst_eq|].
+  etransitivity ; [apply (lift_ops_subst _ (m := ZModel _) )|].
+  f_equal.
+  apply vec_map_fun_ext.
+  intros.
+  symmetry.
+  etransitivity ; [apply Z_ren_subst_eq|].
+  apply Z_subst_ext.
+  intro n.
+  cbn.
+  apply var_shiftₙ.
+  reflexivity.
+Qed.
+
+Fixpoint Z_ren_compat {E}(f : nat -> nat)(x y : Z (main_signature E))(r :  ZEr E x y) : 
+  ZEr E (Z_ren f x) (Z_ren f y).
+Proof.
+ destruct r. 
+ - cbn.
+   rewrite 2 lift_ops_Z_ren.
+   constructor.
+ - constructor.
+ - apply symE.
+   apply Z_ren_compat.
+   assumption.
+ - eapply transE; apply Z_ren_compat; eassumption.
+ - cbn.
+   apply congrE.
+   induction H.
+   + cbn.
+     constructor.
+   + cbn.
+     constructor.
+     * apply IHrel_vec.
+     * apply Z_ren_compat.
+       assumption.
+Qed.
+
+Definition ZE_ren {E : equational_theory} (f : nat -> nat) (x : ZE E) : ZE E.
+  revert x .
+  unshelve eapply (factor1 _ _ (Z_ren f)).
+  apply Z_ren_compat.
+Defined.
+
+Lemma ZE_ren_proj{E : equational_theory} (f : nat -> nat) (z : Z (main_signature E)):
+  projE (Z_ren f z) = ZE_ren f (projE z).
+Proof.
+  symmetry.
+  apply factorize1.
+Qed.
+
+Definition VarE {E : equational_theory} (n : nat) : ZE E := Var _ n / ZEr E.
+
+Fixpoint ZE_mixed_subst {E : equational_theory}
+         (f : nat -> ZE E) (z : Z (main_signature E)) : ZE E :=
+  match z with
+    Var _ n => f n
+  | Op op v => ZE_ops 
+                 (Vec_map 
+                    (fun n x =>
+                       x ⟦ shiftₙₛ VarE ZE_ren n f ⟧
+                    ) v)
+  end where "t ⟦ s ⟧" := (ZE_mixed_subst s t).
+
+Fixpoint ZE_mixed_subst_ext {E}(f g : nat -> ZE E) (eq : forall n, f n = g n) (x : Z _) :
+  x ⟦ f ⟧ = x ⟦ g ⟧.
+Proof.
+  destruct x.
+  - cbn; apply eq.
+  - cbn.
+    f_equal.
+    apply vec_map_fun_ext.
+    intros.
+    apply ZE_mixed_subst_ext.
+    intro.
+    eapply shiftₙₛ_ext.
+    + reflexivity.
+    + apply eq.
+Qed.
+
+Fixpoint Z_subst_quot {E : equational_theory}
+      (f : nat -> Z (main_signature E)) (z : Z (main_signature E)) :
+  (z [ f ]ₛ) / ZEr E = z ⟦ @projE E ∘ f ⟧.
+Proof.
+  destruct z.
+  - reflexivity.
+  - cbn.
+    etransitivity; [ symmetry; apply ZE_ops_projE|].
+    f_equal.
+    etransitivity;[apply vec_map_map|].
+    cbn.
+    apply vec_map_fun_ext.
+    intros n z.
+    etransitivity;[ apply Z_subst_quot| ].
+    cbn.
+    apply ZE_mixed_subst_ext.
+    intro m.
+    unfold compose.
+    apply shiftₙₛ_natural.
+    + reflexivity.
+    + cbn.
+      apply ZE_ren_proj.
+Qed.
+
+
+(*necessite l'axiome du choix (lift_fun) *)
+Fixpoint ZE_mixed_subst_compat
+  (E : equational_theory) 
+      (f : nat -> ZE E)(z z' : Z (main_signature E))(rz :ZEr E z z'): z ⟦ f ⟧ = z' ⟦ f ⟧.
+Proof.
+  destruct rz.
+  - cbn.
+    destruct (lift_fun f) as [h heq].
+    rewrite heq.
+    do 2 rewrite <- (Z_subst_quot h).
+    etransitivity.
+    {
+    apply (f_equal projE).
+    apply  (lift_ops_subst _ (m := ZModel _) v h).
+    }
+    etransitivity;revgoals.
+    {
+      symmetry.
+    apply (f_equal projE).
+    apply  (lift_ops_subst _ (m := ZModel _) v h).
+    }
+    apply class_eq.
+    constructor.
+  - reflexivity.
+  - symmetry.
+    apply ZE_mixed_subst_compat.
+    assumption.
+  - etransitivity; apply ZE_mixed_subst_compat; eassumption.
+  - cbn.
+    f_equal.
+    induction H.
+    + cbn.
+      constructor.
+    + cbn.
+      f_equal.
+      * apply ZE_mixed_subst_compat.
+        assumption.
+      * apply IHrel_vec.
+Qed.
+Definition ZE_subst {E : equational_theory}  (f : nat -> ZE E) (x : ZE E) : ZE E.
+  revert x f.
+  unshelve refine (factor _ _ _).
+  - exact (fun z f => ZE_mixed_subst f z).
+  - intros z z' rz.
+    cbn.
+    apply extensionality.
+    intro f.
+    apply ZE_mixed_subst_compat.
+    assumption.
+Defined.
+      
+Definition ZEModel_data (E : equational_theory) : model_data (main_signature E) :=
+  {|
+  carrier := ZE E;
+  variables := VarE  ;
+  ops := @ZE_ops E ;
+  substitution := ZE_subst
+  |}.
+
+Program Definition ZEModel ( E : equational_theory) : model (main_signature E) :=
+  {| data := ZEModel_data E |}.
+Next Obligation.
+Admitted.
+
+Fixpoint ini_mor_compat {E} (m : model_equational E)( x y : Z (main_signature E))(r :  ZEr E x y) :
+  ini_mor m x = ini_mor m y.
+Proof.
+  induction r; try congruence.
+  - cbn.
+    etransitivity; revgoals.
+    apply (lift_ops_natural _ (initial_morphism m)).
+    etransitivity; revgoals.
+    apply model_eq.
+    symmetry.
+    apply (lift_ops_natural _ (initial_morphism m)).
+  - cbn.
+    f_equal.
+    induction H.
+    + reflexivity.
+    + cbn.
+      f_equal.
+      * apply ini_mor_compat; assumption.
+      * assumption.
+Qed.
+Definition ini_morE {E} (m : model_equational E)(z : ZE E) : m.
+  revert z.
+  unshelve eapply factor.
+  - apply (ini_mor).
+  - apply ini_mor_compat.
+Defined.
+
+Lemma ini_morE_proj {E} (m : model_equational E) x :
+  ini_morE m (x / ZEr E) = ini_mor m x.
+Proof.
+  apply factorize.
+Qed.
+
+(* TODO prouver  que les proj est un morphisme de modele*)
+Lemma ini_morE_unique {E} (m : model_equational E)(f : model_mor (ZEModel E) m)(z : ZE E) :
+f z = ini_morE m z.
+  revert z.
+  apply class_ind.
+  intro x.
+  cbn.
+  rewrite ini_morE_proj.
+  Abort.
+(*
+  destruct (lift_fun f : ) as [h feq].
+  apply factor_extens.
+  revert z.
+  unshelve eapply factor.
+  - apply (ini_mor).
+  - apply ini_mor_compat.
+Defined.
+
+
+
+*)
+
+
+
+
+
+
+
+
+
+
+
+
