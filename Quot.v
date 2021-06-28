@@ -107,29 +107,6 @@ Definition theta X Y (r : Eqv Y) : (X -> Y) // feqv X r -> X -> Y // r :=
   fun (f : (X -> Y) // feqv X r) (x : X) =>
     factor (feqv X r) (@theta' X Y r) (@theta'_compat X Y r) f x.
 
-Axiom theta_surj : forall X Y (r : Eqv Y) (f : X -> Y // r),
-  exists h : (X -> Y) // feqv X r, f = theta h.
-
-Lemma lift_fun : forall X Y (r : Eqv Y) (f : X -> Y // r),
-  exists h : X -> Y, f = fun x => h x / r.
-Proof.
-intros.
-destruct (theta_surj f) as [h Hh].
-generalize h Hh. clear h Hh.
-apply (class_ind
-  (fun h => f = theta h -> exists h0 : X -> Y, f = (fun x : X => h0 x / r))).
-intros g Hg.
-exists g.
-subst f.
-apply extensionality.
-unfold theta.
-intros.
-rewrite factorize.
-reflexivity.
-Qed.
-
-Ltac lift_fun f g :=
-  destruct (lift_fun f) as [g Hlift_f]; subst f.
 
 Section Factor1.
 
