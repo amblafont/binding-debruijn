@@ -202,3 +202,138 @@ apply (class_ind
   (fun y => factor2 rX rY rZ f Hf (x/rX) y = factor2 rX rY rZ g Hg (x/rX) y)).
 intro. do 2 rewrite factorize2. auto.
 Qed.
+
+(**
+
+Additions to the original file
+
+ *)
+Require Import Lib.
+Require Import Arith.
+Section relvec.
+
+  Context (A B : Type)(R : B -> B -> Prop) .
+Inductive rel_vec : forall (l : list A),
+    Vec B l -> Vec B l -> Prop :=
+  nil_rel_vec :  rel_vec  (NilV _) (NilV _)
+| cons_rel_vec : forall n l t t' v v', rel_vec (l := l)  v v' -> R t t' -> rel_vec (ConsV n t v)(ConsV n t' v').
+
+Lemma rel_vec_rfl (rx : forall x, R x x) l (v : Vec B l) : rel_vec v v.
+  induction v.
+  - constructor.
+  - constructor; auto.
+Qed.
+  End relvec.
+
+(* class_ind : forall [X : Type] [r : Eqv X] (P : X // r -> Prop), (forall x : X, P (x / r)) -> forall x : X // r, P x *)
+Fixpoint vec_quot_ind
+         {A B : Type}{R : Eqv B}{l : list A}
+         (P : Vec (B // R) l -> Prop)
+         (Pquot : forall (v : Vec B l), P (Vec_map (fun _ => class R) v)) 
+         (v : Vec (B // R) l) : P v.
+Proof.
+  destruct v as [|a l b v].
+  - apply (Pquot (NilV _)).
+  - cbn.
+    revert v b.
+    unshelve refine (vec_quot_ind _  _ _ _ _  _).
+    +  intros v b.
+       revert b v.
+       unshelve refine (class_ind _ _).
+       exact (fun b v => Pquot (ConsV a b v )).
+Qed.
+
+Fixpoint vec_quot_out (A B C : Type)(R : Eqv B)(l : list A)[f : Vec B l -> C]
+      (compat_f : forall b b', rel_vec R b b' -> f b = f b')
+      (v : Vec (B // R) l) : C.
+  destruct v as [|a l b v].
+  - exact (f (NilV _)).
+  - cbn.
+    revert v b.
+    unshelve refine (vec_quot_out _ _ _ _ _ _  _).
+    +  intros v b.
+       revert b v.
+       unshelve refine (factor R _ _).
+        * exact (fun b v => f (ConsV a b v )).
+        * intros b b' r.
+          cbn.
+          apply extensionality.
+          intro v.
+          apply compat_f.
+          --  apply cons_rel_vec.
+              ++ apply rel_vec_rfl, eqv_rfl.
+              ++ assumption.
+    + intros v v' rb.
+      cbn.
+      apply extensionality.
+      apply class_ind.
+      intro b.
+      cbn.
+      rewrite factorize.
+      apply compat_f.
+      constructor.
+      * assumption.
+      * apply eqv_rfl.
+Defined.
+
+Fixpoint vec_quot_out_proj (A B C : Type)(R : Eqv B)(l : list A)(f : Vec B l -> C)
+      (compat_f : forall b b', rel_vec R b b' -> f b = f b')
+      (v : Vec B l) :
+  vec_quot_out compat_f (Vec_map (fun _ => class R) v) = f v.
+Proof.
+  destruct v.
+  - reflexivity.
+  - cbn.
+    rewrite vec_quot_out_proj.
+    rewrite factorize.
+    reflexivity.
+Qed.
+
+Fixpoint finitary_seq_quot_ind
+         {B : Type}{R : Eqv B}
+         (P : (nat -> (B // R)) -> Prop)
+         (n : nat)
+         (Pn : forall f g, (forall p, p < n -> f p = g p) -> P f -> P g)
+         (Pq : forall f, P (fun n => class R (f n))) f {struct n}: P f.
+Proof.
+  destruct n.
+  - generalize (f 0).
+    apply class_ind.
+    intro b.
+    eapply Pn.
+    + intros p hp.
+      exfalso.
+      inversion hp.
+    + unshelve apply Pq.
+      intro n.
+      exact b.
+  -
+    remember (f n) as b' eqn:eqb'.
+    cut (P (fun p => if p =? n then b' else f p)) .
+    + eapply Pn.
+      intro p.
+      case (Nat.eqb_spec); intros;congruence.
+    + clear eqb'.
+      revert b'.
+    refine (class_ind _ _).
+    intro b.
+    pattern f.
+    revert f.
+    eapply (finitary_seq_quot_ind B R _ n).
+    * intros f g  Pfg hf.
+      unshelve eapply (Pn _ _ _ hf).
+      cbn.
+      intros p hp.
+      case (Nat.eqb_spec).
+      -- reflexivity.
+      -- intro.
+         apply Pfg.
+         inversion hp; auto.
+         contradiction.
+    * intro f.
+      cut (P (fun p => class R (if p =? n then b else f p))).
+      -- eapply Pn.
+         intro.
+         case (Nat.eqb_spec); reflexivity.
+      -- apply Pq.
+Qed.
