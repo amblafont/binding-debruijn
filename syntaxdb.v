@@ -150,22 +150,8 @@ Record model_data (S : signature) :=
 Arguments ops [S m] o.
 Notation "x [ s ]" := (substitution s x).
 Notation "↑" := (shiftₛ (variables _) (substitution (m := _))).
-(* Existing Instance has_subst . *)
 
-(*
-Definition ops_subst_law {S : signature} (m : model_data S) : Type :=
-     forall (o : O S) (v : Vec m (ar o)) (f : nat -> m),
-          (ops o v) [ f ] =
-          ops o (Vec_map
-                        (fun n t =>
-                           (* substitution (shiftₛ (variables m) substitution n f)) *)
-                           (* substitution (shiftₛ (variables m) (substitution (m := m)) n f) *)
-                           t [ ↑ n f ]
-                        )
-              v).
-*)
-
-Record model_laws {S : signature}(m : model_data S) :=
+Record is_model {S : signature}(m : model_data S) :=
   {
     (* fun ext for substitution *)
     substitution_ext : forall (f g : nat -> m),  (forall n, f n = g n) -> forall x,
@@ -177,34 +163,55 @@ Record model_laws {S : signature}(m : model_data S) :=
           (ops o v) [ f ] =
           ops o (Vec_map
                         (fun n t =>
-                           (* substitution (shiftₛ (variables m) substitution n f)) *)
-                           (* substitution (shiftₛ (variables m) (substitution (m := m)) n f) *)
                            t [ ↑ n f ]
                         )
               v);
-
     (* additionnal laws (not needed for initiality) : associativity of substitution *) 
     assoc : forall (f g : nat -> m) (x : m),
         x [ g ] [ f ] = x [ (fun n => (g n) [ f ]) ] ;
+
     id_neutral : forall (x : m), x [ variables m ] = x
   }.
 
 Record model (S : signature) :=
-  { data :> model_data S;
-    laws : model_laws data
+  { mod_carrier :> model_data S;
+    mod_laws : is_model mod_carrier
   }.
 
 Arguments model S%signature_scope.
 
-Record model_mor {S : signature} (X : model_data S) (Y : model_data S) :=
-  { carrier_mor :> X -> Y ;
-    variables_mor : forall n, carrier_mor (variables X n) = variables Y n ;
-    substitution_mor : forall (f : nat -> X) (x : X), carrier_mor (x [ f ]) =
-                                              (carrier_mor x) [ carrier_mor ∘ f ];
-    ops_mor : forall (o : O S)(v : Vec X (ar o)), carrier_mor (ops o v) =
-                                                         ops o (Vec_map (fun _ => carrier_mor) v)
-  
+Record is_model_mor
+       {S : signature} (X : model_data S) (Y : model_data S)
+       (u : X -> Y) :=
+  {
+    variables_mor : forall n, u (variables X n) = variables Y n ;
+    substitution_mor : forall (f : nat -> X) (x : X), u (x [ f ]) =
+                                              (u x) [ u ∘ f ];
+    ops_mor : forall (o : O S)(v : Vec X (ar o)), u (ops o v) =
+                                             ops o (Vec_map (fun _ => u) v)
   }.
+
+Record model_mor {S : signature} (X : model_data S) (Y : model_data S) :=
+  { mor_carrier :> X -> Y ;
+    mor_laws : is_model_mor mor_carrier
+  }.
+
+(* model morphisms compose *)
+Lemma is_model_mor_compose 
+       {S : signature} (X : model_data S) (Y Z : model_data S)
+       (u : X -> Y)(v : Y -> Z)
+       (um : is_model_mor u)(vm : is_model_mor v) :
+  is_model_mor (v ∘ u).
+Proof.
+  unfold compose.
+  split; cbn; intros.
+  - rewrite 2 variables_mor; auto.
+  - rewrite 2 substitution_mor; auto.
+  - rewrite 2 ops_mor; auto.
+    f_equal.
+    apply vec_map_map.
+Qed.
+
 
 (* Z is a model *)
 
@@ -223,7 +230,7 @@ Proof.
   - cbn; apply eq.
   - cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     apply Z_subst_ext.
     intro.
@@ -239,7 +246,7 @@ Proof.
   - reflexivity.
   - cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     rewrite Z_ren_subst_eq.
     cbn.
@@ -252,7 +259,7 @@ Qed.
 
 (* Uniqueness of the renamings *)
 Fixpoint ZModel_unique_ren (S : signature) (s : (nat -> Z S) -> Z S -> Z S)
-      (s_laws : model_laws {| carrier := Z S;
+      (s_laws : is_model {| carrier := Z S;
                               variables := Var S;
                               ops := @Op S;
                               substitution := s|}) f z {struct z} :
@@ -265,7 +272,7 @@ Proof.
     apply (ops_subst s_laws).
     cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     etransitivity. 
     {  apply (substitution_ext s_laws).
@@ -280,7 +287,7 @@ Qed.
 
 (* Uniqueness of the substitution *)
 Fixpoint ZModel_unique_subst (S : signature) (s : (nat -> Z S) -> Z S -> Z S)
-      (s_laws : model_laws {| carrier := Z S;
+      (s_laws : is_model {| carrier := Z S;
                               variables := Var S;
                               ops := @Op S;
                               substitution := s|}) f z {struct z} :
@@ -293,7 +300,7 @@ Proof.
     apply (ops_subst s_laws).
     cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     etransitivity.
     apply (ZModel_unique_subst _ _ s_laws).
@@ -344,7 +351,7 @@ Proof.
   - cbn.
     f_equal.
     rewrite vec_map_map.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     cbn.
     etransitivity;[apply Z_ren_subst|].
@@ -372,7 +379,7 @@ Proof.
   - cbn.
     f_equal.
     rewrite vec_map_map.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     cbn.
     etransitivity;[apply Z_subst_ren|].
@@ -409,7 +416,7 @@ Proof.
   - cbn.
     f_equal.
     rewrite vec_map_map.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     cbn.
     etransitivity;[apply Z_subst_subst|].
@@ -471,7 +478,7 @@ Fixpoint Z_subst_id {S} (z : Z S) : z [Var S ]ₛ = z.
   - cbn.
     f_equal.
     etransitivity;[|apply Vec_map_id].
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     etransitivity;[|apply Z_subst_id].
     apply Z_subst_ext.
@@ -481,14 +488,14 @@ Fixpoint Z_subst_id {S} (z : Z S) : z [Var S ]ₛ = z.
 Qed.
   
 
-Lemma Z_model_laws (S : signature) : model_laws (Z_model_data S).
+Lemma Z_model_laws (S : signature) : is_model (Z_model_data S).
 Proof.
   repeat split.
   - exact Z_subst_ext.
   - intros o v f.
     cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     apply Z_subst_ext.
     intro.
@@ -501,7 +508,7 @@ Qed.
 
 
 Definition ZModel (S : signature) : model S :=
-  {| data := Z_model_data S; laws := Z_model_laws S |}.
+  {| mod_carrier := Z_model_data S; mod_laws := Z_model_laws S |}.
 
 (* the initial morphism *)
 
@@ -516,10 +523,10 @@ Fixpoint mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
   ini_mor m (Z_ren f x) = (ini_mor m x) [ variables m ∘ f ].
   destruct x as [n|o v].
   - cbn.
-    rewrite (variables_subst (laws m)).
+    rewrite (variables_subst (mod_laws m)).
     reflexivity.
   - cbn -[leb].
-    rewrite (ops_subst (laws m)).
+    rewrite (ops_subst (mod_laws m)).
     repeat rewrite vec_map_map.
     cbn -[leb].
     apply f_equal.
@@ -531,13 +538,13 @@ Fixpoint mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
       * cbn -[leb].
         rewrite mor_ren.
         cbn -[leb].
-        apply (substitution_ext (laws m)).
+        apply (substitution_ext (mod_laws m)).
         intro n.
         unfold compose.
         apply var_shiftₙ.
         cbn.
         intros.
-        rewrite (variables_subst (laws m)).
+        rewrite (variables_subst (mod_laws m)).
         reflexivity.
 Defined.
 
@@ -548,10 +555,10 @@ Fixpoint mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
   ini_mor m (x [ f ]ₛ) = (ini_mor m x) [ ini_mor m ∘ f].
   destruct x as [n|o v].
   - cbn.
-    rewrite (variables_subst (laws m)).
+    rewrite (variables_subst (mod_laws m)).
     reflexivity.
   - cbn -[leb].
-    rewrite (ops_subst (laws m)).
+    rewrite (ops_subst (mod_laws m)).
     repeat rewrite vec_map_map.
     cbn -[leb].
     apply f_equal.
@@ -561,7 +568,7 @@ Fixpoint mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
       f_equal; revgoals.
       * exact IHv.
       * rewrite mor_subst.
-        apply (substitution_ext (laws m)).
+        apply (substitution_ext (mod_laws m)).
         intro n.
         unfold compose.
         apply shiftₙₛ_natural.
@@ -571,25 +578,28 @@ Fixpoint mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
 Qed.
 
 
+Lemma ini_mor_is_model_mor {S : signature}(m : model S) : is_model_mor (X := ZModel S) (ini_mor m).
+Proof.
+  split; auto.
+  apply mor_subst.
+Qed.
 
 Program Definition initial_morphism {S : signature}(m : model S) : model_mor (ZModel S) m :=
   {|
-  carrier_mor := ini_mor m;
+  mor_carrier := ini_mor m;
+  mor_laws := ini_mor_is_model_mor m
   |}.
-Next Obligation.
-  apply mor_subst.
-Qed.
 
 Fixpoint initial_morphism_unique {S : signature}(m : model_data S) (f : model_mor (ZModel S) m)
      x : f x = ini_mor m x. 
 Proof.
   destruct x.
-  - apply variables_mor.
+  - apply (variables_mor f.(mor_laws) ).
   - etransitivity.
-    apply ops_mor.
+    apply (ops_mor f.(mor_laws)).
     cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     apply initial_morphism_unique.
 Qed.

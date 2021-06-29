@@ -103,7 +103,7 @@ Proof.
   etransitivity ; [apply Z_ren_subst_eq|].
   etransitivity ; [apply (lift_ops_subst _ (m := ZModel _) )|].
   f_equal.
-  apply vec_map_fun_ext.
+  apply vec_map_ext.
   intros.
   symmetry.
   etransitivity ; [apply Z_ren_subst_eq|].
@@ -171,7 +171,7 @@ Proof.
   - cbn; apply eq.
   - cbn.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     apply ZE_mixed_subst_ext.
     intro.
@@ -191,7 +191,7 @@ Proof.
     f_equal.
     etransitivity;[apply vec_map_map|].
     cbn.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros n z.
     etransitivity;[ apply Z_subst_quot| ].
     cbn.
@@ -396,7 +396,7 @@ Proof.
   rewrite vec_map_map.
   rewrite vec_map_map.
 
-  apply vec_map_fun_ext.
+  apply vec_map_ext.
   intros.
   apply ZE_ren_proj.
 Qed.
@@ -413,7 +413,7 @@ Proof.
   cbn.
   f_equal.
   rewrite vec_map_map.
-  apply vec_map_fun_ext.
+  apply vec_map_ext.
   intros.
   symmetry.
   etransitivity.
@@ -443,7 +443,7 @@ Proof.
   - cbn.
     f_equal.
     rewrite vec_map_map.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     cbn.
     etransitivity;[apply ZE_ren_mixed_subst|].
@@ -492,7 +492,7 @@ Proof.
     rewrite ZE_ops_ren.
     f_equal.
     rewrite vec_map_map.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros.
     etransitivity.
     { apply ZE_mixed_subst_ren. }
@@ -541,7 +541,7 @@ Proof.
     rewrite ZE_ops_subst.
     f_equal.
     rewrite vec_map_map.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros a z.
     etransitivity.
     { apply ZE_mixed_subst_subst. }
@@ -588,7 +588,7 @@ Proof.
     etransitivity;revgoals.
     apply ZE_ops_projE.
     f_equal.
-    apply vec_map_fun_ext.
+    apply vec_map_ext.
     intros n z.
     etransitivity;[|apply ZE_mixed_subst_id].
     apply ZE_mixed_subst_ext.
@@ -607,8 +607,8 @@ Proof.
   apply ZE_mixed_subst_id.
 Qed.
 Program Definition ZEModel ( E : equational_theory) : model (main_signature E) :=
-  {| data := ZEModel_data E ;
-     laws := {|
+  {| mod_carrier := ZEModel_data E ;
+     mod_laws := {|
               substitution_ext := @ZE_subst_ext E ;
               variables_subst := @ZE_subst_var E ;
               ops_subst := @ZE_ops_subst E ;
@@ -617,11 +617,13 @@ Program Definition ZEModel ( E : equational_theory) : model (main_signature E) :
             |}
   |}.
 
-Definition projE_mor {E} : model_mor (ZModel _) (ZEModel E) :=
-  {| carrier_mor := (projE : ZModel _ -> ZEModel E) ;
+Program Definition projE_mor {E} : model_mor (ZModel _) (ZEModel E) :=
+  {| mor_carrier := (projE : ZModel _ -> ZEModel E) ;
+     mor_laws := {|
      substitution_mor := fun f z => eq_sym (ZE_subst_proj_proj f z) ;
      variables_mor := fun _ => eq_refl _  ;
      ops_mor := fun o v => eq_sym (ZE_ops_projE v)
+                               |}
   |}.
 
 

@@ -19,7 +19,7 @@ Lemma vec_map_map {A B C D : Type}(f : A -> B -> C) (g : A -> C -> D) {l : list 
   induction v; cbn; congruence.
 Qed.
 
-Definition vec_map_fun_ext {A B C : Type}(f g : A -> B -> C) {l : list A}
+Definition vec_map_ext {A B C : Type}(f g : A -> B -> C) {l : list A}
       (v : Vec B l) (h : forall a b, f a b = g a b): Vec_map f v = Vec_map g v.
   induction v; cbn; congruence.
 Defined.
