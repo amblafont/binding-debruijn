@@ -590,17 +590,25 @@ Program Definition initial_morphism {S : signature}(m : model S) : model_mor (ZM
   mor_laws := ini_mor_is_model_mor m
   |}.
 
-Fixpoint initial_morphism_unique {S : signature}(m : model_data S) (f : model_mor (ZModel S) m)
+Fixpoint initial_morphism_unique {S : signature}(m : model_data S)
+         (f : (ZModel S) -> m) (hf : is_model_mor f)
      x : f x = ini_mor m x. 
 Proof.
   destruct x.
-  - apply (variables_mor f.(mor_laws) ).
+  - apply (variables_mor hf ).
   - etransitivity.
-    apply (ops_mor f.(mor_laws)).
+    apply (ops_mor hf).
     cbn.
     f_equal.
     apply vec_map_ext.
     intros.
     apply initial_morphism_unique.
+    assumption.
 Qed.
 
+
+Corollary initial_morphism_unique' {S : signature}(m : model_data S)
+         (f : model_mor (ZModel S) m) 
+         x : f x = ini_mor m x .
+  exact (initial_morphism_unique f.(mor_laws) x).
+Qed.

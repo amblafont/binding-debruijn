@@ -660,7 +660,6 @@ Proof.
   apply factorize.
 Qed.
 
-(* TODO prouver  que les proj est un morphisme de modele*)
 Lemma ini_morE_unique {E} (m : model_equational E)(f : model_mor (ZEModel E) m)(z : ZE E) :
 f z = ini_morE m z.
   revert z.
@@ -668,7 +667,9 @@ f z = ini_morE m z.
   intro x.
   cbn.
   rewrite ini_morE_proj.
-  Abort.
+  apply (initial_morphism_unique (f := f ∘ projE_mor)).
+  apply is_model_mor_compose; apply mor_laws.
+Qed.
 
 
 
