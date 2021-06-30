@@ -16,9 +16,8 @@ A detailed summary is available at [`Summary.v`](Summary.v).
 Axioms are only required to construct the syntax with equations.
 No axiom is used to prove initiality for the standard binding signatures.
 
-The formalization relies on an axiomatisation of quotient types in [`Quot.v`](Quot.v)
-adapted from http://web.math.unifi.it/users/maggesi/mechanized/lambda/.
-It involves function extensionality.
+The formalization relies on an axiomatisation of quotient types in
+[`Quot.v`](Quot.v), and involves function extensionality.
 
 
 ## Files
