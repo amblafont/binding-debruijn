@@ -4,5 +4,9 @@ This repository contains two formalisations of the syntax of binding signatures
 
 See the corresponding subdirectories for a more precise description of each one.
 
-To pull the coq and hol last versions at the same time:
+After checking the repository for the same time, use 
+`git submodule update --init --recursive`
+to download the hol formalisation.
+
+Later, to pull the coq and hol last versions at the same time, use
 `git pull --recurse-submodules`
