@@ -1,12 +1,24 @@
-This repository contains two formalisations of the syntax of binding signatures
-1. one in hol, with a specific example of lambda-calculus
-1. one in coq
+This repository contains
 
-See the corresponding subdirectories for a more precise description of each one.
+1. two mechanisations of the initial algebra semantics of binding
+signatures in De Bruijn monads,
 
-After checking the repository for the same time, use 
+  a. one in hol, with a specific example of lambda-calculus and
+
+  b. one in coq, together with
+
+2. a file bonus.pdf, which contains the development of a notion of
+signature for programming languages sketched in the main submission.
+
+For a more precise description of each mechanisation, please see the
+corresponding subdirectories.
+
+After checking the repository for the first time, use
+
 `git submodule update --init --recursive`
+
 to download the hol formalisation.
 
 Later, to pull the coq and hol last versions at the same time, use
+
 `git pull --recurse-submodules`
