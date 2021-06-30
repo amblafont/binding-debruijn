@@ -1,0 +1,8 @@
+This repository contains two formalisations of the syntax of binding signatures
+1. one in hol, with a specific example of lambda-calculus
+1. one in coq
+
+See the corresponding subdirectories for a more precise description of each one.
+
+To pull the coq and hol last versions at the same time:
+`git pull --recurse-submodules`

@@ -1,0 +1,3 @@
+[submodule "hol"]
+	path = hol
+	url = git@github.com:maggesi/dbmonad.git
