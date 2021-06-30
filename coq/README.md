@@ -30,6 +30,7 @@ associated proof of initiality
 3. [`Quot.v`](Quot.v): axiomatization of quotient types, and various proofs about them
 4. [`quotsyntax.v`](quotsyntax.v): construction of the syntax for an equational theory,
 with associated proof of initiality.
+5. [`Summary.v`](Summary.v) A summary of the results
 
 
 

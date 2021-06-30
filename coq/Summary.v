@@ -260,3 +260,14 @@ Check (fun (E : equational_theory) =>
          carrier (ZEModel_equational E) ≡ ZE E
       ).
 
+(** we can define a model mophism from [ZE E] to any model that satisfies the
+ equation *)
+Check (@ini_morE_model_mor : forall (E : equational_theory)
+                               (m : model_equational E), model_mor (ZEModel_equational E) m).
+
+(** It is actually unique *)
+Check (@ini_morE_unique : 
+         forall (E : equational_theory) (m : model_equational E)
+           (f : model_mor (ZEModel_equational E) m)
+           (z : ZE E), f z = ini_morE_model_mor m z).
+
