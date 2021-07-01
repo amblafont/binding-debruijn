@@ -144,7 +144,6 @@ Record model_data (S : signature) :=
     ops : forall (o : O S), Vec carrier (ar o) -> carrier;
     (* has_subst :> has_substitution carrier *)
     substitution : (nat -> carrier) -> (carrier -> carrier)
-
   }.
 
 Arguments ops [S m] o.

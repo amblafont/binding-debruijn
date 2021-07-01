@@ -225,7 +225,6 @@ Lemma rel_vec_rfl (rx : forall x, R x x) l (v : Vec B l) : rel_vec v v.
 Qed.
   End relvec.
 
-(* class_ind : forall [X : Type] [r : Eqv X] (P : X // r -> Prop), (forall x : X, P (x / r)) -> forall x : X // r, P x *)
 Fixpoint vec_quot_ind
          {A B : Type}{R : Eqv B}{l : list A}
          (P : Vec (B // R) l -> Prop)

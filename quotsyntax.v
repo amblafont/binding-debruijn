@@ -617,15 +617,37 @@ Program Definition ZEModel ( E : equational_theory) : model (main_signature E) :
             |}
   |}.
 
-Program Definition projE_mor {E} : model_mor (ZModel _) (ZEModel E) :=
+
+Program Definition projE_is_model_mor {E} :
+  @is_model_mor _ (ZModel (main_signature E)) (ZEModel E) projE :=
+  {|
+  substitution_mor := fun f z => eq_sym (ZE_subst_proj_proj f z) ;
+  variables_mor := fun _ => eq_refl _  ;
+  ops_mor := fun o v => eq_sym (ZE_ops_projE v) |}.
+
+Definition projE_mor {E} : model_mor (ZModel _) (ZEModel E) :=
   {| mor_carrier := (projE : ZModel _ -> ZEModel E) ;
-     mor_laws := {|
-     substitution_mor := fun f z => eq_sym (ZE_subst_proj_proj f z) ;
-     variables_mor := fun _ => eq_refl _  ;
-     ops_mor := fun o v => eq_sym (ZE_ops_projE v)
-                               |}
+     mor_laws := projE_is_model_mor 
   |}.
 
+Lemma ZE_model_eq 
+  (E : equational_theory)
+  (o : O (metavariables E))
+  (v : Vec (ZE E) (ar o))
+  : 
+  left_handside E (ZEModel E) o v = right_handside E (ZEModel E) o v.
+Proof.
+  revert v.
+  refine (vec_quot_ind _ _).
+  intro v.
+  rewrite 2 (lift_ops_natural _ (projE_mor (E := E))).
+  apply class_eq.
+  constructor.
+Qed.
+Definition  ZEModel_equational ( E : equational_theory) : model_equational E :=
+  {| main_model := ZEModel E ;
+     model_eq :=  @ZE_model_eq E
+  |}.
 
 Fixpoint ini_mor_compat {E} (m : model_equational E)( x y : Z (main_signature E))(r :  ZEr E x y) :
   ini_mor m x = ini_mor m y.
@@ -659,6 +681,112 @@ Lemma ini_morE_proj {E} (m : model_equational E) x :
 Proof.
   apply factorize.
 Qed.
+
+(*
+Proof similar to ZE_mixed_subst_max_fv
+ *)
+Fixpoint ini_mor_subst_max_fv {S : signature}(m : model S)(z : Z S)(f g : nat -> m)
+  (fgeq: forall n, n <= max_fv z -> f n = g n) {struct z} : ini_mor m z [ f ] = 
+                                         ini_mor m z [ g ].
+Proof.
+  destruct z.
+  - cbn.
+    rewrite 2 variables_subst ; try apply mod_laws.
+    apply fgeq.
+    cbn.
+    reflexivity.
+  - cbn.
+    rewrite 2 ops_subst; try apply mod_laws.
+    revert fgeq.
+    cbn.
+    intros.
+    f_equal.
+    rewrite 2 vec_map_map.
+    induction v.
+    + reflexivity.
+    + cbn.
+      f_equal.
+      * apply ini_mor_subst_max_fv.
+        intros.
+        unfold shiftₛ,shiftₙₛ.
+        case (Nat.ltb_spec).
+        -- reflexivity.
+        -- intros.
+           f_equal.
+           apply fgeq.
+           cbn.
+           lia.
+      * apply IHv.
+        cbn.
+        intros.
+        apply fgeq.
+        cbn.
+        lia.
+Qed.
+    
+
+Lemma ini_morE_is_model_mor {E} (m : model_equational E)
+      : @is_model_mor _ (ZEModel E) m (ini_morE m).
+Proof.
+  split; cbn.
+  - intro n.
+    etransitivity.
+    apply ini_morE_proj.
+    reflexivity.
+  - intros.
+    revert x.
+    apply class_ind.
+    intro x.
+    revert f.
+    rewrite ini_morE_proj.
+    fold (projE x).
+    refine (finitary_seq_quot_ind _ (n := 1 + max_fv x) _ _ ).
+    + intros f g hfg.
+      rewrite 2 ZE_subst_proj.
+      rewrite (ZE_mixed_subst_max_fv (f := f)(g := g)); [| intros; apply hfg; lia].
+      rewrite (ini_mor_subst_max_fv (S := main_signature E)(m := m) (z := x)
+                                    (f := ini_morE m ∘ f)
+                                    (g := ini_morE m ∘ g)).
+      * tauto.
+      * intros.
+        unfold compose.
+        rewrite hfg.
+        reflexivity.
+        lia.
+    + intros.
+      change (fun n => f n / ZEr E) with (compose (projE (E := E)) f).
+      rewrite ZE_subst_proj_proj.
+      etransitivity; revgoals.
+      {
+        apply substitution_ext;[apply mod_laws|].
+        intro.
+        symmetry.
+        apply ini_morE_proj.
+      }
+      etransitivity; [apply ini_morE_proj|].
+      apply mor_subst.
+  - intros.
+    cbn.
+    revert v.
+    eapply (vec_quot_ind).
+    intro v.
+    rewrite ZE_ops_projE.
+    etransitivity.
+    apply ini_morE_proj.
+    cbn.
+    rewrite vec_map_map.
+    f_equal.
+    apply vec_map_ext.
+    intros.
+    symmetry.
+    apply ini_morE_proj.
+Qed.
+
+Program Definition ini_morE_model_mor {E} (m : model_equational E)
+  : model_mor (ZEModel E) m :=
+  {| mor_carrier := ini_morE m ;
+     mor_laws := ini_morE_is_model_mor m;
+  |}.
 
 Lemma ini_morE_unique {E} (m : model_equational E)(f : model_mor (ZEModel E) m)(z : ZE E) :
 f z = ini_morE m z.

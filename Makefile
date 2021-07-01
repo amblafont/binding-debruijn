@@ -1,4 +1,4 @@
-OBJS = Lib.vo Quot.vo syntaxdb.vo quotsyntax.vo
+OBJS = Lib.vo Quot.vo syntaxdb.vo quotsyntax.vo Summary.vo
 CC = coqc
 
 all: $(OBJS)
