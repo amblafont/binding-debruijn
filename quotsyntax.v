@@ -164,20 +164,42 @@ Fixpoint ZE_mixed_subst {E : equational_theory}
                     ) v)
   end where "t ⟦ s ⟧" := (ZE_mixed_subst s t).
 
-Fixpoint ZE_mixed_subst_ext {E}(f g : nat -> ZE E) (eq : forall n, f n = g n) (x : Z _) :
-  x ⟦ f ⟧ = x ⟦ g ⟧.
+Fixpoint max_fv {S : signature} (z : Z S) : nat :=
+  match z with
+    Var _ n => n
+  | Op op  v => vec_max (Vec_map (fun n x => n + max_fv x) v)
+  end.
+
+Fixpoint ZE_mixed_subst_ext {E} (f g : nat -> ZE E)(z : Z _)
+         (hfg : forall n, n <= max_fv z -> f n = g n) {struct z} :
+  z ⟦ f ⟧ = z ⟦ g ⟧.
 Proof.
-  destruct x.
-  - cbn; apply eq.
+  destruct z.
+  - cbn in hfg.
+    cbn.
+    apply hfg.
+    reflexivity.
   - cbn.
     f_equal.
-    apply vec_map_ext.
-    intros.
-    apply ZE_mixed_subst_ext.
-    intro.
-    eapply shiftₙₛ_ext.
+    cbn in hfg.
+    revert hfg.
+    induction v.
     + reflexivity.
-    + apply eq.
+    + cbn.
+      intro hfg.
+      f_equal.
+      * apply ZE_mixed_subst_ext.
+        intros.
+        apply shiftₙₛ_ext.
+        reflexivity.
+        intros.
+        apply hfg.
+        lia.
+      * apply IHv.
+        cbn.
+        intros.
+        apply hfg.
+        lia.
 Qed.
 
 Fixpoint Z_subst_quot {E : equational_theory}
@@ -196,7 +218,7 @@ Proof.
     etransitivity;[ apply Z_subst_quot| ].
     cbn.
     apply ZE_mixed_subst_ext.
-    intro m.
+    intros m hm.
     unfold compose.
     apply shiftₙₛ_natural.
     + reflexivity.
@@ -204,54 +226,7 @@ Proof.
       apply ZE_ren_proj.
 Qed.
 
-Fixpoint vec_max {A : Type}(l : list A) (v : Vec nat l) : nat :=
-  match v with
-    NilV _ => 0
-  | ConsV a b lB => Nat.max b (vec_max lB)
-    end.
 
-Fixpoint max_fv {S : signature} (z : Z S) : nat :=
-  match z with
-    Var _ n => n
-  | Op op  v => vec_max (Vec_map (fun n x => n + max_fv x) v)
-  end.
-
-Fixpoint ZE_mixed_subst_max_fv {E} (f g : nat -> ZE E)(z : Z _)
-         (hfg : forall n, n <= max_fv z -> f n = g n) {struct z} :
-  z ⟦ f ⟧ = z ⟦ g ⟧.
-Proof.
-  destruct z.
-  - cbn in hfg.
-    cbn.
-    apply hfg.
-    reflexivity.
-  - cbn.
-    f_equal.
-    cbn in hfg.
-    revert hfg.
-    induction v.
-    + reflexivity.
-    + cbn.
-      intro hfg.
-      f_equal.
-      * apply ZE_mixed_subst_max_fv.
-        intros.
-        unfold shiftₙₛ.
-        case (Nat.ltb_spec).
-        -- reflexivity.
-        -- intros.
-           f_equal.
-           cbn in hfg.
-           apply hfg.
-           lia.
-           (* apply h. *)
-           (* lia. *)
-      * apply IHv.
-        cbn.
-        intros.
-        apply hfg.
-        lia.
-Qed.
 
 Fixpoint ZE_mixed_subst_compat
   (E : equational_theory) 
@@ -263,7 +238,7 @@ Proof.
     refine (finitary_seq_quot_ind _ (n := 1 + Nat.max (max_fv(left_handside E (ZModel (main_signature E)) o v))
                                   (max_fv (right_handside E (ZModel (main_signature E)) o v))) _ _).
     + intros f g hfg.
-      erewrite 2 (ZE_mixed_subst_max_fv (f := f)(g := g)).
+      erewrite 2 (ZE_mixed_subst_ext (f := f)(g := g)).
       * tauto.
       * intros; apply hfg; lia.
       * intros; apply hfg; lia.
@@ -333,7 +308,7 @@ Proof.
   intro z.
   rewrite  2 (ZE_subst_proj _ z).
   apply ZE_mixed_subst_ext.
-  assumption.
+  auto.
 Qed.
 
 Lemma ZE_ren_var {E}(f : nat -> nat) (n : nat): ZE_ren (E := E) f (VarE n) = VarE (f n).
@@ -419,7 +394,7 @@ Proof.
   etransitivity.
   apply ZE_subst_proj.
   apply ZE_mixed_subst_ext.
-  intro n.
+  intros n hn.
   apply shiftₙₛ_ext.
   -  intros. symmetry. 
      apply ZE_ren_subst_eq.
@@ -448,19 +423,8 @@ Proof.
     cbn.
     etransitivity;[apply ZE_ren_mixed_subst|].
     apply ZE_mixed_subst_ext.
-    intro n.
-    (* ca devrait marcher *)
-  unfold shiftₙ, shiftₙₛ.
-  cbn -[leb].
-  cbn -[leb].
-  destruct (n <? a) eqn:eqna.
-  + rewrite eqna; reflexivity.
-  + cbn -[leb].
-    case(Nat.ltb_spec _ _).
-    * intro. exfalso. lia.
-    * intros. f_equal.
-      rewrite Nat.add_sub.
-      reflexivity.
+    intros n hn.
+    apply shiftₙₛ_shiftₙ.
 Qed.
 
 Lemma ZE_ren_subst {E} (g : nat -> nat) (f : nat -> ZE E) (z : ZE E) :
@@ -497,26 +461,10 @@ Proof.
     etransitivity.
     { apply ZE_mixed_subst_ren. }
     apply ZE_mixed_subst_ext.
-    intro n.
-    (* ca devrait marcher *)
-  unfold shiftₙ, shiftₙₛ.
-  cbn -[leb].
-  cbn -[leb].
-  destruct (n <? a) eqn:eqna.
-  + rewrite ZE_ren_var;rewrite eqna; reflexivity.
-  + cbn -[leb].
-    rewrite 2 ZE_ren_ren.
-    rewrite 2 ZE_ren_subst_eq.
-    apply ZE_subst_ext.
-    intro.
-    unfold compose.
-    cbn -[leb].
-    f_equal.
-    case(Nat.ltb_spec _ _).
-    * intro. exfalso. lia.
-    * intros. f_equal.
-      rewrite Nat.add_sub.
-      reflexivity.
+    intros n hn.
+    apply ren_shiftₙ_shiftₙₛ.
+    + intros; apply ZE_ren_var.
+    + intros; apply ZE_ren_ren.
 Qed.
 Lemma ZE_subst_ren
   {E} (g : nat -> nat) (f : nat -> ZE E) (z : ZE E) :
@@ -546,26 +494,19 @@ Proof.
     etransitivity.
     { apply ZE_mixed_subst_subst. }
     apply ZE_mixed_subst_ext.
-    intro n.
-  unfold shiftₛ, shiftₙₛ.
-  case  (Nat.ltb_spec _ _) .
-    + rewrite ZE_subst_var.
-      case  (Nat.ltb_spec _ _).
-      reflexivity.
-      lia.
-  + cbn -[leb].
-    intros.
-    rewrite ZE_ren_subst.
-    rewrite ZE_subst_ren.
+    intros n hn.
+    etransitivity.
+    {
     apply ZE_subst_ext.
     intro.
-
-    case(Nat.ltb_spec _ _).
-    * intro. exfalso. lia.
-    * intros. f_equal.
-      rewrite Nat.add_sub.
-      symmetry.
-      apply ZE_ren_subst_eq.
+    apply (shiftₛ_eq (ren := ZE_ren)).
+    apply ZE_ren_subst_eq.
+    }
+    cbn.
+    eapply subst_shiftₙₛ.
+    + intros; apply ZE_subst_var.
+    + intros; apply ZE_ren_subst.
+    + intros; apply ZE_subst_ren.
 Qed.
     (* ah mais c'est comme avant.. *)
 Lemma ZE_subst_subst {E : equational_theory}
@@ -592,7 +533,7 @@ Proof.
     intros n z.
     etransitivity;[|apply ZE_mixed_subst_id].
     apply ZE_mixed_subst_ext.
-    intro m.
+    intros m hm.
     apply shiftₙₛ_var.
     apply ZE_ren_var.
 Qed.
@@ -685,7 +626,7 @@ Qed.
 (*
 Proof similar to ZE_mixed_subst_max_fv
  *)
-Fixpoint ini_mor_subst_max_fv {S : signature}(m : model S)(z : Z S)(f g : nat -> m)
+Fixpoint ini_mor_subst_ext {S : signature}(m : model S)(z : Z S)(f g : nat -> m)
   (fgeq: forall n, n <= max_fv z -> f n = g n) {struct z} : ini_mor m z [ f ] = 
                                          ini_mor m z [ g ].
 Proof.
@@ -706,13 +647,11 @@ Proof.
     + reflexivity.
     + cbn.
       f_equal.
-      * apply ini_mor_subst_max_fv.
+      * apply ini_mor_subst_ext.
         intros.
-        unfold shiftₛ,shiftₙₛ.
-        case (Nat.ltb_spec).
+        apply shiftₙₛ_ext.
         -- reflexivity.
         -- intros.
-           f_equal.
            apply fgeq.
            cbn.
            lia.
@@ -743,8 +682,8 @@ Proof.
     refine (finitary_seq_quot_ind _ (n := 1 + max_fv x) _ _ ).
     + intros f g hfg.
       rewrite 2 ZE_subst_proj.
-      rewrite (ZE_mixed_subst_max_fv (f := f)(g := g)); [| intros; apply hfg; lia].
-      rewrite (ini_mor_subst_max_fv (S := main_signature E)(m := m) (z := x)
+      rewrite (ZE_mixed_subst_ext (f := f)(g := g)); [| intros; apply hfg; lia].
+      rewrite (ini_mor_subst_ext (S := main_signature E)(m := m) (z := x)
                                     (f := ini_morE m ∘ f)
                                     (g := ini_morE m ∘ g)).
       * tauto.

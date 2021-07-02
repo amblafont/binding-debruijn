@@ -60,21 +60,141 @@ Arguments Op [S] o.
 
 
 
-(* shifts on renamings *)
-Definition shiftₙ (n : nat) (f : nat -> nat)  : nat -> nat :=
-    fun p => if p <? n then p else f (p - n) + n.
-
-
+(* Link with the definition of the paper *)
+Definition subst_prime {X : Type}(z : X)(lift : X -> X) (f : nat -> X) : nat -> X :=
+  fun n => match n with
+          0 => z
+        | S n => lift (f n)
+        end.
 (* shifts on substitution using renamings *)
 Definition shiftₙₛ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n : nat) (f : nat -> X)  : nat -> X :=
-    fun p => if p <? n then var p else ren (fun x => x + n) (f (p - n)).
+  Nat.iter n (subst_prime (var 0) (ren S)) f .
+      (* fun  p => if p <? n then var p else ren (fun x => x + n) (f (p - n)). *)
 
+
+Fixpoint shiftₙₛ_eq {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))
+      (ren_ext : forall f g, (forall x, f x = g x ) -> forall x, ren f x = ren g x)
+      (ren_id :  forall x, ren id x = x)
+      (ren_var : forall f n,  ren f (var n) = var (f n))
+      (ren_ren : forall f g n,  ren f (ren g n) = ren (f ∘ g) n)
+      (n : nat) (f : nat -> X) p :
+      shiftₙₛ var ren n f p = 
+      (* Nat.iter n (subst_prime (var 0) (ren S)) f p. *)
+if p <? n then var p else ren (fun x => x + n) (f (p - n)).
+Proof.
+  unfold shiftₙₛ.
+  destruct n.
+  - cbn.
+    rewrite Nat.sub_0_r.
+
+    symmetry.
+    etransitivity;[|apply ren_id].
+    apply ren_ext.
+    apply Nat.add_0_r.
+  - unfold subst_prime.
+    destruct p.
+    + reflexivity.
+    + cbn -[leb].
+      etransitivity.
+      {
+        apply( f_equal (ren S)).
+        apply shiftₙₛ_eq; auto.
+      }
+      unfold shiftₙₛ.
+      change (S p <? S n) with (p <? n).
+      rewrite <- (commutes_if (ren S)).
+      rewrite ren_var .
+      rewrite ren_ren.
+      unfold compose.
+      destruct (p <? n); auto.
+Qed.
+
+    
+
+(* shifts on renamings *)
+Definition shiftₙ (n : nat) (f : nat -> nat)  : nat -> nat := shiftₙₛ (fun n => n)(fun f => f) n f.
 (* shifts on substitution using substitution structure *)
 Definition shiftₛ {X : Type}(var : nat -> X)(subst : (nat -> X) -> (X -> X))(n : nat) (f : nat -> X)  : nat -> X :=
   shiftₙₛ var (fun f => subst (fun n => var (f n))) n f.
 
 
-Lemma shiftₙₛ_natural
+Fixpoint  f_shiftₙₛ
+       {X1 : Type}(var1 : nat -> X1)(ren1 : (nat -> nat) -> (X1 -> X1))
+       {X2 : Type}(var2 : nat -> X2)(ren2 : (nat -> nat) -> (X2 -> X2))
+       {X3 : Type}(var3 : nat -> X3)(ren3 : (nat -> nat) -> (X3 -> X3))
+       (s : (nat -> X1) -> X2 -> X3)
+       (u : X1 -> X3)
+       (uvar : forall n, u (var1 n) = var3 n)
+       (svar : forall f n, s f (var2 n) = u (f n))
+       (sren : forall f g z,  s f (ren2 g z) = s ( fun n => f (g n)  )z )
+       (rens : forall f g z,  ren3 f (s g z) = s ( fun n => ren1 f (g n)  )z )
+       (* (sext : forall f g, (forall n, f n = g n) -> forall x, s f x = s g x) *)
+       f g n m  
+  :
+    (s (shiftₙₛ var1 ren1 m f) (shiftₙₛ var2 ren2 m g n)) =
+    (shiftₙₛ var3 ren3 m (fun n0 : nat => s f (g n0)) n).
+Proof.
+  destruct m as [|m].
+  - reflexivity.
+  - cbn.
+    destruct n as [|n].
+    + cbn.
+      etransitivity.
+      apply svar.
+      apply uvar.
+    + cbn.
+      etransitivity.
+      apply sren.
+      cbn.
+      etransitivity; revgoals.
+      {
+        apply(f_equal (ren3 S)).
+        eapply (f_shiftₙₛ _ _ _ _ _ _ _ _ _ s u) ; eassumption.
+      }
+      symmetry.
+      apply rens.
+Qed.
+
+(*
+Lemma  f_shiftₙₛ
+       {X1 : Type}(var1 : nat -> X1)(ren1 : (nat -> nat) -> (X1 -> X1))
+       {X2 : Type}(var2 : nat -> X2)(ren2 : (nat -> nat) -> (X2 -> X2))
+       {X3 : Type}(var3 : nat -> X3)(ren3 : (nat -> nat) -> (X3 -> X3))
+       (s : (nat -> X1) -> X2 -> X3)
+       (u : X1 -> X3)
+       (uvar : forall n, u (var1 n) = var3 n)
+       (svar : forall f n, s f (var2 n) = u (f n))
+       (sren : forall f g z,  s f (ren2 g z) = s ( fun n => f (g n)  )z )
+       (rens : forall f g z,  ren3 f (s g z) = s ( fun n => ren1 f (g n)  )z )
+       (* (sext : forall f g, (forall n, f n = g n) -> forall x, s f x = s g x) *)
+       f g m n
+  :
+    (s (shiftₙₛ var1 ren1 m f) (shiftₙₛ var2 ren2 m g n)) =
+    (shiftₙₛ var3 ren3 m (fun n0 : nat => s f (g n0)) n).
+  unfold shiftₙ, shiftₙₛ.
+  cbn -[leb].
+  rewrite <- (commutes_if (s _)).
+  cbn -[leb].
+  destruct (n <? m) eqn:eqna.
+  + rewrite svar.
+    rewrite eqna.
+    apply uvar.
+  + cbn -[leb].
+    rewrite sren.
+    erewrite sext; revgoals.
+    {
+      intro.
+      case(Nat.ltb_spec _ _).
+      + intro. exfalso. lia.
+      + intros. f_equal.
+        rewrite Nat.add_sub.
+        reflexivity.
+    }
+    symmetry.
+    apply rens.
+Qed.
+*)
+Fixpoint shiftₙₛ_natural
       {X : Type} (varX : nat -> X) (renX : (nat -> nat) -> (X -> X))
       {Y : Type} (varY : nat -> Y) (renY : (nat -> nat) -> (Y -> Y))
       (g : X -> Y)(gvar : forall n, g (varX n) = varY n)
@@ -82,10 +202,56 @@ Lemma shiftₙₛ_natural
       (n : nat) (f : nat -> X) x :
   g (shiftₙₛ varX renX n f x) = shiftₙₛ varY renY n (fun n => g (f n)) x.
 Proof.
-  unfold shiftₙ, shiftₙₛ.
-  rewrite <- gvar, <- gren.
-  symmetry.
-  apply commutes_if.
+  destruct n as [|n].
+  - reflexivity.
+  - cbn.
+    destruct x; cbn.
+    + apply gvar.
+    + etransitivity; revgoals.
+      { 
+      apply(f_equal (renY S)).
+      eapply (shiftₙₛ_natural _ varX renX) ; eassumption.
+      }
+      apply gren.
+Qed.
+
+Lemma shiftₙ_id  (p : nat)(n : nat)  : 
+  shiftₙ n (fun x => x) p = p.
+  revert p.
+  induction n.
+  - reflexivity.
+  - cbn.
+    intro.
+    destruct p as [|p].
+    + reflexivity.
+    + cbn.
+      f_equal.
+      apply IHn.
+Qed.
+
+Fixpoint shiftₙₛ_ext {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
+      (ren_eq : forall f x, ren f x = ren' f x)
+      (n : nat) (f g : nat -> X)
+      p
+      (fg_eq : forall q, q + n <= p -> f q = g q) { struct n}
+  : shiftₙₛ var ren n f p = shiftₙₛ var ren' n g p .
+Proof.
+  destruct n as [|n].
+  - cbn.
+    apply fg_eq.
+    rewrite plus_n_O.
+    reflexivity.
+  - cbn.
+    destruct p; cbn.
+    + reflexivity.
+    + etransitivity.
+      apply ren_eq.
+      f_equal.
+      eapply (shiftₙₛ_ext).
+      *  assumption.
+      *  intros.
+         apply fg_eq.
+         lia.
 Qed.
 
 Lemma var_shiftₙ 
@@ -94,24 +260,66 @@ Lemma var_shiftₙ
       (n : nat) (f : nat -> nat) (x : nat) :
   var ((shiftₙ n f) x) = shiftₙₛ var ren n (fun p => var (f p)) x.
 Proof.
-  unfold shiftₙ.
-  etransitivity; revgoals.
-  eapply  (shiftₙₛ_natural (g := var)).
-  - reflexivity.
-  - symmetry.
-    apply eq_ren.
-  - reflexivity.
+  apply shiftₙₛ_natural; auto.
 Qed.
-  
-Lemma shiftₙₛ_ext {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
-      (ren_eq : forall f x, ren f x = ren' f x)
-      (n : nat) (f g : nat -> X)
-      (fg_eq : forall p, f p = g p) p : shiftₙₛ var ren n f p = 
-                                   shiftₙₛ var ren' n g p .
+
+Lemma shiftₙₛ_var {X : Type}(var : nat -> X)ren
+      (eq_ren : forall f n, ren f (var n) = var (f n))
+      n m : shiftₙₛ var ren n var m = var m.
 Proof.
-  unfold shiftₙₛ.
-  rewrite fg_eq, ren_eq.
-  reflexivity.
+    unshelve erewrite <- (var_shiftₙ _ _ (fun n => n)).
+    + auto.
+    + cbn.
+      f_equal.
+      apply shiftₙ_id.
+Qed.
+
+Lemma  subst_shiftₙₛ
+       {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))
+       (s : (nat -> X) -> (X -> X))
+       (* (uvar : forall f n, s f (var n) = var' n) *)
+       (svar : forall f n, s f (var n) = f n)
+       (sren : forall f g z,  s f (ren g z) = s ( fun n => f (g n)  )z )
+       (rens : forall f g z,  ren f (s g z) = s ( fun n => ren f (g n)  )z )
+       (* (sext : forall f g, (forall n, f n = g n) -> forall x, s f x = s g x) *)
+       (n m : nat)
+       (f : nat -> X) (g : nat -> X)   :
+  (s (shiftₙₛ var ren m f) (shiftₙₛ var ren m g n)) =
+  (shiftₙₛ var ren m (fun n0 : nat => s f (g n0)) n).
+Proof.
+  apply (f_shiftₙₛ (u := id)); auto.
+Qed.
+Lemma shiftₙₛ_shiftₙ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n m : nat) (f : nat -> X)
+      (g : nat -> nat) :
+  shiftₙₛ var ren n f (shiftₙ n g m) = shiftₙₛ var ren n (fun n0 : nat => f (g n0)) m.
+Proof.
+  apply (f_shiftₙₛ (s := id)(u := id)); auto.
+Qed.
+
+Lemma ren_shiftₙ_shiftₙₛ 
+      {X : Type}
+      (var : nat -> X)
+      (ren : (nat -> nat) -> (X -> X))(m n : nat) (f : nat -> X)(g : nat -> nat)
+      (eq_ren : forall f n, ren f (var n) = var (f n)) 
+      (ren_ren : forall f g x, ren f (ren g x) = ren (fun n => f (g n)) x)  :
+      (* (ren_ext : forall f g , (forall x, f x = g x) -> forall x, ren f x = ren g x) : *)
+  ren (shiftₙ n g) (shiftₙₛ var ren n f m) = shiftₙₛ var ren n (fun n0 : nat => ren g (f n0)) m.
+  Proof.
+    eapply (f_shiftₙₛ ); auto.
+  Qed.
+  
+
+Lemma shiftₛ_eq {X : Type}(var : nat -> X)
+      (ren : (nat -> nat) -> (X -> X))
+      (s : (nat -> X) -> (X -> X))
+      (ren_eq : forall f x, ren f x = s (var ∘ f) x)
+      (n : nat) (f : nat -> X)
+      p
+  : shiftₛ var s n f p = shiftₙₛ var ren n f p .
+Proof.
+  apply shiftₙₛ_ext.
+  - symmetry; apply ren_eq.
+  - reflexivity.
 Qed.
 
 (** Renaming *)
@@ -172,12 +380,35 @@ Record is_model {S : signature}(m : model_data S) :=
     id_neutral : forall (x : m), x [ variables m ] = x
   }.
 
+
+
 Record model (S : signature) :=
   { mod_carrier :> model_data S;
     mod_laws : is_model mod_carrier
   }.
 
 Arguments model S%signature_scope.
+
+Lemma shiftₙₛ_in_model {S}{X : model S}(f : nat -> X) n p :
+      ↑ n f p = if p <? n then variables X p else f (p - n) [fun x => variables X (x + n)] .
+
+Proof.
+  apply shiftₙₛ_eq.
+  - intros.
+    apply substitution_ext; [apply mod_laws|].
+    auto.
+  - intros.
+    apply id_neutral ; apply mod_laws.
+  - intros.
+    cbn.
+    refine (variables_subst (mod_laws X) _ _).
+  - intros.
+    etransitivity.
+    apply assoc ; apply mod_laws.
+    apply substitution_ext; [apply mod_laws|].
+    intro.
+    refine (variables_subst (mod_laws X) _ _).
+Qed.
 
 Record is_model_mor
        {S : signature} (X : model_data S) (Y : model_data S)
@@ -235,7 +466,7 @@ Proof.
     intro.
     eapply shiftₙₛ_ext.
     + reflexivity.
-    + apply eq.
+    + intros; apply eq.
 Defined.
 
 Fixpoint Z_ren_subst_eq {S} (f : nat -> nat) (x : Z S) :
@@ -310,38 +541,6 @@ Proof.
     + reflexivity.
 Qed.
 
-Lemma shiftₙₛ_shiftₙ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n m : nat) (f : nat -> X)g :
-  shiftₙₛ var ren n f (shiftₙ n g m) = shiftₙₛ var ren n (fun n0 : nat => f (g n0)) m.
-Proof.
-  unfold shiftₙₛ, shiftₙ.
-  cbn -[leb].
-  destruct (m <? n) eqn:e.
-  - rewrite e.
-    reflexivity.
-  - case(Nat.ltb_spec _ _).
-    + intro. exfalso. lia.
-    + intros.
-      rewrite Nat.add_sub.
-      reflexivity.
-Qed.
-
-(*
-Lemma shiftₙ_shiftₙ g f a n : 
-  (shiftₙ a g ∘ shiftₙ a f) n = shiftₙ a (g ∘ f) n.
-Proof.
-  unfold compose.
-  cbn.
-  unfold shiftₙₛ, shiftₙ.
-  destruct (n <? a) eqn:e.
-  - rewrite e.
-    reflexivity.
-  - case(Nat.ltb_spec _ _).
-    + intro. exfalso. lia.
-    + intros. f_equal.
-      f_equal.
-      lia.
-Qed.
-*)
 Fixpoint Z_ren_subst {S : signature} g f (z : Z S) :
 Z_ren g z [ f ]ₛ = z [ fun n => f (g n)  ]ₛ.
 Proof.
@@ -384,26 +583,9 @@ Proof.
     etransitivity;[apply Z_subst_ren|].
     apply Z_subst_ext.
     intro n.
-
-  unfold shiftₙ, shiftₙₛ.
-  cbn -[leb].
-  rewrite <- (commutes_if (Z_ren _)).
-  cbn -[leb].
-  destruct (n <? a) eqn:eqna.
-  + reflexivity.
-  + cbn -[leb].
-    rewrite Z_ren_ren.
-    rewrite Z_ren_ren.
-    rewrite 2 Z_ren_subst_eq.
-    apply Z_subst_ext.
-    intro m.
-    unfold compose.
-    cbn -[leb].
-    case(Nat.ltb_spec _ _).
-    * intro. exfalso. lia.
-    * intros. 
-      rewrite Nat.add_sub.
-      reflexivity.
+    apply ren_shiftₙ_shiftₙₛ.
+    + reflexivity.
+    + intros. apply Z_ren_ren.
 Qed.
 
 Fixpoint Z_subst_subst {S : signature}
@@ -423,54 +605,13 @@ Proof.
     intro n.
     cbn.
     (* ca devrait marcher *)
-  unfold shiftₙ, shiftₙₛ.
-  cbn -[leb].
-  rewrite <- (commutes_if (Z_subst _)).
-  cbn -[leb].
-  rewrite if_if.
-  destruct (n <? a) eqn:eqna.
-  + reflexivity.
-  + cbn -[leb].
-    rewrite Z_ren_subst.
-    erewrite Z_subst_ext; revgoals.
-    {
-      intro.
-  - case(Nat.ltb_spec _ _).
-    + intro. exfalso. lia.
-    + intros. f_equal.
-      rewrite Nat.add_sub.
-      reflexivity.
-      }
-    symmetry.
-    apply Z_subst_ren.
-    Qed.
-
-Fixpoint Vec_map_id {A B : Type}{l : list A}(v : Vec B l) : Vec_map (fun _ x => x) v = v.
-  destruct v.
-  -  reflexivity.
-  -  cbn.
-     f_equal.
-     apply Vec_map_id.
-Defined.
-
-Lemma shiftₙ_id (n : nat) (p : nat)  : 
-  shiftₙ n (fun x => x) p = p.
-  unfold shiftₙ.
-  case (Nat.ltb_spec).
-  + reflexivity.
-  + lia.
+    apply subst_shiftₙₛ.
+    + reflexivity.
+    + intros. apply Z_ren_subst.
+    + intros. apply Z_subst_ren.
 Qed.
 
-Lemma shiftₙₛ_var {X : Type}(var : nat -> X)ren
-      (eq_ren : forall f n, ren f (var n) = var (f n))
-      n m : shiftₙₛ var ren n var m = var m.
-Proof.
-    unshelve erewrite <- (var_shiftₙ _ _ (fun n => n)).
-    + auto.
-    + cbn.
-      f_equal.
-      apply shiftₙ_id.
-Qed.
+
 Fixpoint Z_subst_id {S} (z : Z S) : z [Var S ]ₛ = z.
   destruct z.
   - reflexivity.
@@ -498,7 +639,9 @@ Proof.
     intros.
     apply Z_subst_ext.
     intro.
-    unfold shiftₙₛ.
+    symmetry.
+    apply shiftₛ_eq.
+    intros.
     rewrite Z_ren_subst_eq.
     reflexivity.
   - apply Z_subst_subst. 
