@@ -86,7 +86,7 @@ Check (fun S (m : model_data S)
     (substitution_ext : forall f g : nat -> m, (forall n : nat, f n = g n) -> forall x : m, x [f] = x [g])
     (* operations are compatible with the substitution *)
     (ops_subst : forall (o : O S) (v : Vec m (ar (s:=S) o)) (f : nat -> m),
-                ops o v [f] = ops o (Vec_map (fun (n : nat) (t : m) => t [↑ n f]) v))
+                ops o v [f] = ops o (Vec_map (fun (n : nat) (t : m) => t [f ^(n)]) v))
     (* monadic laws *)
     (variables_subst : forall (x : nat) (f : nat -> m), variables m x [f] = f x)
     (assoc : forall (f g : nat -> m) (x : m), (x [g]) [f] = x [fun n : nat => g n [f]])
@@ -99,6 +99,18 @@ Check (fun S (m : model_data S)
     id_neutral := id_neutral |}
   : is_model m
       ).
+
+(** where [f ^(n)] is defined as *)
+Check (
+    fun S (m : model_data S) (f : nat -> m)(n  : nat) =>
+      f^( n ) ≡ Nat.iter n 
+              (fun g => fun n =>
+                       match n with
+                         0 => variables m 0
+                       | S q => g q [ fun n => variables m (1 + n)]
+                       end
+              ) f
+  ).
 
 (** It is indeed the case of the initial model *)
 Check (Z_model_laws : forall (S : signature), is_model (Z_model_data S)).
@@ -163,7 +175,7 @@ Check  (fun (S : signature)(V : signature)
        forall (m : model S) (o : O V) (v : Vec m (ar o)) (f : nat -> m),
          (lift_ops m o v) [ f ] =
          lift_ops m o (Vec_map
-                         (fun n t => t [ ↑ n f ])
+                         (fun n t => t [ f^(n) ])
                          v))
     (** It should also be natural in the model, i.e., commutes
        with model morphisms *)

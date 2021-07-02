@@ -27,7 +27,7 @@ Record half_equation (S1 : signature)(S2 : signature) :=
            forall (m : model S1) (o : O S2) (v : Vec m (ar o)) (f : nat -> m),
           (lift_ops (o := o) v) [ f ] =
           lift_ops (o := o) (Vec_map
-                        (fun n t => t [ ↑ n f ])
+                        (fun n t => t [ f ^(n) ])
               v) ;
     lift_ops_natural : forall (m1 m2 : model S1) (f : model_mor m1 m2)
                          (o : O S2)(v : Vec m1 (ar o)),

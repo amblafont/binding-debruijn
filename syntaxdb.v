@@ -356,7 +356,7 @@ Record model_data (S : signature) :=
 
 Arguments ops [S m] o.
 Notation "x [ s ]" := (substitution s x).
-Notation "↑" := (shiftₛ (variables _) (substitution (m := _))).
+Notation "f ^ ( n )" := (shiftₛ (variables _) (substitution (m := _)) n f) (at level 30).
 
 Record is_model {S : signature}(m : model_data S) :=
   {
@@ -370,7 +370,7 @@ Record is_model {S : signature}(m : model_data S) :=
           (ops o v) [ f ] =
           ops o (Vec_map
                         (fun n t =>
-                           t [ ↑ n f ]
+                           t [ f ^ ( n ) ]
                         )
               v);
     (* additionnal laws (not needed for initiality) : associativity of substitution *) 
@@ -390,7 +390,7 @@ Record model (S : signature) :=
 Arguments model S%signature_scope.
 
 Lemma shiftₙₛ_in_model {S}{X : model S}(f : nat -> X) n p :
-      ↑ n f p = if p <? n then variables X p else f (p - n) [fun x => variables X (x + n)] .
+      f ^(n) p = if p <? n then variables X p else f (p - n) [fun x => variables X (x + n)] .
 
 Proof.
   apply shiftₙₛ_eq.
