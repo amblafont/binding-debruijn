@@ -480,55 +480,55 @@ Qed.
 
 (* Uniqueness of the renamings *)
 Fixpoint ZModel_unique_ren (S : signature) (s : (nat -> Z S) -> Z S -> Z S)
-      (s_laws : is_model {| carrier := Z S;
-                              variables := Var S;
-                              ops := @Op S;
-                              substitution := s|}) f z {struct z} :
+      (s_var : forall (f : nat -> Z S) n, s f (Var S n) = f n)
+      (s_ops : forall (o : O S), binding_condition (Var S) s (Op o))
+      (s_ext : forall (f g : nat -> Z S), (forall n, f n = g n) -> forall x, s f x = s g x)
+      f z {struct z} :
     s (fun n => Var S (f n)) z = Z_ren f z.
 Proof.
   intros.
   destruct z.
-  - apply (variables_subst s_laws).
+  - apply s_var.
   - etransitivity.
-    apply (ops_subst s_laws).
+    apply s_ops.
     cbn.
     f_equal.
     apply vec_map_ext.
     intros.
-    etransitivity. 
-    {  apply (substitution_ext s_laws).
-       intro n.
-       etransitivity;[symmetry; apply var_derivₙ|].
-       intros.
-       exact (variables_subst s_laws _ _).
-       reflexivity.
-    }
-    apply (ZModel_unique_ren _ _ s_laws).
+    etransitivity ; revgoals.
+    apply (ZModel_unique_ren S s s_var s_ops s_ext) .
+    apply s_ext.
+    intro n.
+    cbn.
+    symmetry.
+    apply var_derivₙ.
+    intros.
+    refine (s_var _ _).
 Qed.
 
 (* Uniqueness of the substitution *)
 Fixpoint ZModel_unique_subst (S : signature) (s : (nat -> Z S) -> Z S -> Z S)
-      (s_laws : is_model {| carrier := Z S;
-                              variables := Var S;
-                              ops := @Op S;
-                              substitution := s|}) f z {struct z} :
+      (s_var : forall (f : nat -> Z S) n, s f (Var S n) = f n)
+      (s_ops : forall (o : O S), binding_condition (Var S) s (Op o))
+      (s_ext : forall (f g : nat -> Z S), (forall n, f n = g n) -> forall x, s f x = s g x)
+       f z {struct z} :
     s f z = z [ f ]ₛ. 
 Proof.
   intros.
   destruct z.
-  - apply (variables_subst s_laws).
+  - apply s_var.
   - etransitivity.
-    apply (ops_subst s_laws).
+    apply s_ops.
     cbn.
     f_equal.
     apply vec_map_ext.
     intros.
     etransitivity.
-    apply (ZModel_unique_subst _ _ s_laws).
+    apply (ZModel_unique_subst _ _ s_var s_ops s_ext).
     apply Z_subst_ext.
     intro n.
     apply derivₙₛ_ext.
-    + apply (ZModel_unique_ren s_laws).
+    + apply (ZModel_unique_ren s_var s_ops s_ext).
     + reflexivity.
 Qed.
 

@@ -58,6 +58,12 @@ Check ((fun (S : signature)
             : model_data S
       )).
 
+(** We use the square bracket notation for substitution *)
+
+Check (fun S (m : model_data S) (x : m) (f : nat -> m) =>
+         x [ f ] ≡ substitution f x
+      ).
+
 (** On the syntax, we define substitution by induction (we need
 actually to define renaming first because Coq does not accept
 readily termination) *)
@@ -70,11 +76,47 @@ Check (fun (S : signature) => (Z_model_data S : model_data S)
                                substitution := Z_subst |}
       ).
 
-(** We use the notation _ [ _ ] *)
 
-Check (fun S (m : model_data S) (x : m) (f : nat -> m) =>
-         x [ f ] ≡ substitution f x
+
+(** The binding condition: stability by substitution *)
+Check (
+    fun S (m : model_data S) (o : O S) =>
+      binding_condition (variables m)(substitution (m := m)) (ops o)
+    ≡ forall (f : nat -> m)(v : vec m (ar (s:=S) o)),
+          ops o v [f] = ops o (vec_map (fun (n : nat) (t : m) => t [f ^(n)]) v)).
+
+(** where [f ^ ( n )] is defined by iterating derivation *)
+Check (
+    fun S (m : model_data S) (f : nat -> m)(n  : nat) =>
+      f^( n ) ≡ Nat.iter n 
+              (fun g => fun n =>
+                       match n with
+                         0 => variables m 0
+                       | S q => g q [ fun n => variables m (1 + n)]
+                       end
+              ) f
+  ).
+
+(**
+Substitution is uniquely characterised by the binding condition
+and compatibility with variables
+ *)
+Check (ZModel_unique_subst :
+         forall (S : signature)
+           (* a given substitution operation *)
+           (s : (nat -> Z S) -> Z S -> Z S),
+           (* that commutes with variables  *)
+       (forall (f : nat -> Z S) (n : nat), s f (Var S n) = f n) ->
+       (* and operations *)
+       (forall o : O S, binding_condition (Var S) s (Op o)) ->
+       (* which is compatible with pointwise equality of functions
+          (obvious with the axiom of function extensionality)
+         *)
+       (forall f g : nat -> Z S, (forall n : nat, f n = g n) -> forall x : Z S, s f x = s g x) ->
+       forall (f : nat -> Z S) (z : Z S),
+         s f z = substitution (m := Z_model_data S) f z
       ).
+
 
 (** Models need to satisfy some laws *)
 
@@ -100,28 +142,9 @@ Check (fun S (m : model_data S)
   : is_model m
       ).
 
-(** It is indeed the case of the syntax *)
+
+(** The syntax is a model *)
 Check (Z_model_laws : forall (S : signature), is_model (Z_model_data S)).
-
-(** The binding condition is compatibility of the operation with
- substitution*)
-Check (
-    fun S (m : model_data S) (o : O S) =>
-      binding_condition (variables m)(substitution (m := m)) (ops o)
-    ≡ forall (f : nat -> m)(v : vec m (ar (s:=S) o)),
-          ops o v [f] = ops o (vec_map (fun (n : nat) (t : m) => t [f ^(n)]) v)).
-
-(** [f ^ ( n )] is defined as *)
-Check (
-    fun S (m : model_data S) (f : nat -> m)(n  : nat) =>
-      f^( n ) ≡ Nat.iter n 
-              (fun g => fun n =>
-                       match n with
-                         0 => variables m 0
-                       | S q => g q [ fun n => variables m (1 + n)]
-                       end
-              ) f
-  ).
 
 
 (** Morphisms of models *)
