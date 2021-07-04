@@ -290,3 +290,65 @@ Check (@ini_morE_unique :
            (f : model_mor (ZEModel_equational E) m)
            (z : ZE E), f z = ini_morE_model_mor m z).
 
+
+(**
+
+As an example: lambda-calculus modulo β and η.
+First we need to define the signature for lambda-calculus without equation
+
+ *)
+Check ((LC_sig : signature) ≡
+  {| O := LC_O;
+     ar := fun o => match o with
+                   App => 0 :: 0 :: nil
+                 | Abs => 1 :: nil
+                 end
+  |}).
+
+
+(**
+Then we need to define the signature for the metavariables.
+As we enforce two equations, beta and eta, there are two operations.
+
+ *)
+
+Check ((LCβη_metavariables : signature) ≡
+  {|
+    O := LCβη_metavariables_O ;
+    ar := fun o => match o with
+                  Beta =>
+                  (* two metavariables in (λx) y = x[y],
+                     with x binding a variable *)
+                    1 :: 0 :: nil 
+                | Eta => 0 :: nil
+                  (* one metavariable: t = (λ(t[n ↦ n+1] 0) *)
+                end
+  |}).
+
+(**
+Now, we can define the equational theory for lambda calculus modulo beta and eta is defined
+as follows:
+ *)
+Check (LCβη_sig ≡
+  {|
+  main_signature := LC_sig;
+  metavariables := LCβη_metavariables ;
+  left_handside := _ ;
+  right_handside := _ ;
+  |}).
+
+(**
+The left/right handsides are defined as follows, for beta and then for eta.
+ *)
+
+Check (fun (m : model LC_sig) (x y : m) =>
+         left_handside LCβη_sig m Beta  (x :: y :: NilV)%v ≡ app (abs x) y
+      /\ right_handside LCβη_sig m Beta  (x :: y :: NilV)%v ≡
+                        x [ fun n => match n with 0 => y | S p => variables m p end ]).
+
+Check (fun (m : model LC_sig) t =>
+         left_handside LCβη_sig m Eta (t :: NilV)%v ≡ t
+      /\ right_handside LCβη_sig m Eta (t :: NilV)%v ≡
+            (abs (app (t [ fun n => variables m (1 + n) ]) (variables m 0)))
+      ).
+

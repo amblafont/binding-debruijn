@@ -87,7 +87,7 @@ Definition LCβη_right_handside_data (m : model LC_sig)(o : LCβη_metavariable
   end.
 
 
-Program Definition LCβη_sig : equational_theory :=
+Program Example LCβη_sig : equational_theory :=
   {|
   main_signature := LC_sig;
   metavariables := LCβη_metavariables ;
@@ -101,6 +101,10 @@ Program Definition LCβη_sig : equational_theory :=
     |} ;
 
   |}.
+(**
+Next come the proofs that the left handside and the right handside
+are indeed half-equations.
+ *)
 
 Next Obligation .
   red.
@@ -210,6 +214,8 @@ Definition ZEr (E : equational_theory) : Eqv (Z (main_signature E)) :=
 
 (** Syntax for a quotiented signature *)
 Definition ZE(E : equational_theory) := Z (main_signature E) // (ZEr E).
+
+Example LCβη := ZE LCβη_sig.
 
 Definition  projE{E : equational_theory} (z : Z (main_signature E)) : ZE E :=
   z / ZEr E.
