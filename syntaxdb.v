@@ -1,3 +1,11 @@
+(**
+Contents
+- Binding signatures with associated sytnax
+- Derivation of assignments
+- Models of a signature and their morphisms
+- Syntax as a model
+- Initiality
+*)
 
 Require Import Arith.
 Require Import Basics.
@@ -17,31 +25,29 @@ Unset Printing Implicit Defensive.
 Reserved Notation "x [ s ]" (at level 30).
 (* substitution in the syntax *)
 Reserved Notation "x [ s ]ₛ" (at level 30).
- (* for composition *)
 
-Declare Scope signature_scope.
+(* Derivation of substitution *)
+Reserved Notation "f ^ ( n )" (at level 30).
+
+(** * Binding signatures with associated syntax
+ *)
+
 
 Record signature :=
   { O  : Type;
     ar : O -> list nat}.
 
-Arguments O _%signature_scope.
+Inductive Z (S : signature) : Type :=
+  Var : nat -> Z S
+| Op : forall (o : O S), vec (Z S) (ar o) (* this is Z^(length ar) *) -> Z S.
 
-Definition sum_of_signatures (S1 : signature)(S2 : signature) : signature :=
-  {| O := O S1 + O S2 ;
-     ar := fun o =>
-             match o with
-               inl o' => ar o'
-               | inr o' => ar o'
-               end
-  |}.
 
-Infix "+"  := sum_of_signatures : signature_scope.
+Arguments Op [S] o .
+(** Example: the lambda-calculus *)
+Inductive LC_O := App | Abs.
 
-Inductive O_LC := App | Abs.
-
-Definition signature_LC : signature :=
-  {| O := O_LC;
+Definition LC_sig : signature :=
+  {| O := LC_O;
      ar := fun o => match o with
                    App => 0 :: 0 :: nil
                  | Abs => 1 :: nil
@@ -49,40 +55,42 @@ Definition signature_LC : signature :=
   |}.
 
 
+Definition LC := Z LC_sig.
 
-Inductive Z (S : signature) : Type :=
-  Var : nat -> Z S
-| Op : forall (o : O S), Vec (Z S) (ar o) (* this is Z^(length ar) *) -> Z S.
-
-Arguments Z S%signature_scope.
-Arguments Op [S] o.
-
+Definition LC_app (a : LC)(b : LC) : LC :=
+  Op (S := LC_sig) App (a :: b :: NilV)%v.
+Definition LC_abs (a : LC) : LC :=
+  Op (S := LC_sig) Abs (a :: NilV)%v.
 
 
 
-(* Link with the definition of the paper *)
+(** * Definition of derivation
+
+
+ *)
+
+
 Definition subst_prime {X : Type}(z : X)(lift : X -> X) (f : nat -> X) : nat -> X :=
   fun n => match n with
           0 => z
         | S n => lift (f n)
         end.
-(* shifts on substitution using renamings *)
-Definition shiftₙₛ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n : nat) (f : nat -> X)  : nat -> X :=
+(* derivation on substitution using renamings *)
+Definition derivₙₛ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n : nat) (f : nat -> X)  : nat -> X :=
   Nat.iter n (subst_prime (var 0) (ren S)) f .
-      (* fun  p => if p <? n then var p else ren (fun x => x + n) (f (p - n)). *)
 
 
-Fixpoint shiftₙₛ_eq {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))
+(** Alternative definition (not used) *)
+Fixpoint derivₙₛ_eq {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))
       (ren_ext : forall f g, (forall x, f x = g x ) -> forall x, ren f x = ren g x)
       (ren_id :  forall x, ren id x = x)
       (ren_var : forall f n,  ren f (var n) = var (f n))
       (ren_ren : forall f g n,  ren f (ren g n) = ren (f ∘ g) n)
       (n : nat) (f : nat -> X) p :
-      shiftₙₛ var ren n f p = 
-      (* Nat.iter n (subst_prime (var 0) (ren S)) f p. *)
+      derivₙₛ var ren n f p = 
 if p <? n then var p else ren (fun x => x + n) (f (p - n)).
 Proof.
-  unfold shiftₙₛ.
+  unfold derivₙₛ.
   destruct n.
   - cbn.
     rewrite Nat.sub_0_r.
@@ -98,9 +106,9 @@ Proof.
       etransitivity.
       {
         apply( f_equal (ren S)).
-        apply shiftₙₛ_eq; auto.
+        apply derivₙₛ_eq; auto.
       }
-      unfold shiftₙₛ.
+      unfold derivₙₛ.
       change (S p <? S n) with (p <? n).
       rewrite <- (commutes_if (ren S)).
       rewrite ren_var .
@@ -111,14 +119,14 @@ Qed.
 
     
 
-(* shifts on renamings *)
-Definition shiftₙ (n : nat) (f : nat -> nat)  : nat -> nat := shiftₙₛ (fun n => n)(fun f => f) n f.
-(* shifts on substitution using substitution structure *)
-Definition shiftₛ {X : Type}(var : nat -> X)(subst : (nat -> X) -> (X -> X))(n : nat) (f : nat -> X)  : nat -> X :=
-  shiftₙₛ var (fun f => subst (fun n => var (f n))) n f.
+(* derivation on enamings *)
+Definition derivₙ (n : nat) (f : nat -> nat)  : nat -> nat := derivₙₛ (fun n => n)(fun f => f) n f.
+(* derivation on substitution using substitution structure *)
+Definition derivₛ {X : Type}(var : nat -> X)(subst : (nat -> X) -> (X -> X))(n : nat) (f : nat -> X)  : nat -> X :=
+  derivₙₛ var (fun f => subst (fun n => var (f n))) n f.
 
 
-Fixpoint  f_shiftₙₛ
+Fixpoint  s_deriv_deriv
        {X1 : Type}(var1 : nat -> X1)(ren1 : (nat -> nat) -> (X1 -> X1))
        {X2 : Type}(var2 : nat -> X2)(ren2 : (nat -> nat) -> (X2 -> X2))
        {X3 : Type}(var3 : nat -> X3)(ren3 : (nat -> nat) -> (X3 -> X3))
@@ -128,11 +136,10 @@ Fixpoint  f_shiftₙₛ
        (svar : forall f n, s f (var2 n) = u (f n))
        (sren : forall f g z,  s f (ren2 g z) = s ( fun n => f (g n)  )z )
        (rens : forall f g z,  ren3 f (s g z) = s ( fun n => ren1 f (g n)  )z )
-       (* (sext : forall f g, (forall n, f n = g n) -> forall x, s f x = s g x) *)
        f g n m  
   :
-    (s (shiftₙₛ var1 ren1 m f) (shiftₙₛ var2 ren2 m g n)) =
-    (shiftₙₛ var3 ren3 m (fun n0 : nat => s f (g n0)) n).
+    s (derivₙₛ var1 ren1 m f) (derivₙₛ var2 ren2 m g n) =
+    derivₙₛ var3 ren3 m (fun n0 : nat => s f (g n0)) n.
 Proof.
   destruct m as [|m].
   - reflexivity.
@@ -149,58 +156,20 @@ Proof.
       etransitivity; revgoals.
       {
         apply(f_equal (ren3 S)).
-        eapply (f_shiftₙₛ _ _ _ _ _ _ _ _ _ s u) ; eassumption.
+        eapply (s_deriv_deriv _ _ _ _ _ _ _ _ _ s u) ; eassumption.
       }
       symmetry.
       apply rens.
 Qed.
 
-(*
-Lemma  f_shiftₙₛ
-       {X1 : Type}(var1 : nat -> X1)(ren1 : (nat -> nat) -> (X1 -> X1))
-       {X2 : Type}(var2 : nat -> X2)(ren2 : (nat -> nat) -> (X2 -> X2))
-       {X3 : Type}(var3 : nat -> X3)(ren3 : (nat -> nat) -> (X3 -> X3))
-       (s : (nat -> X1) -> X2 -> X3)
-       (u : X1 -> X3)
-       (uvar : forall n, u (var1 n) = var3 n)
-       (svar : forall f n, s f (var2 n) = u (f n))
-       (sren : forall f g z,  s f (ren2 g z) = s ( fun n => f (g n)  )z )
-       (rens : forall f g z,  ren3 f (s g z) = s ( fun n => ren1 f (g n)  )z )
-       (* (sext : forall f g, (forall n, f n = g n) -> forall x, s f x = s g x) *)
-       f g m n
-  :
-    (s (shiftₙₛ var1 ren1 m f) (shiftₙₛ var2 ren2 m g n)) =
-    (shiftₙₛ var3 ren3 m (fun n0 : nat => s f (g n0)) n).
-  unfold shiftₙ, shiftₙₛ.
-  cbn -[leb].
-  rewrite <- (commutes_if (s _)).
-  cbn -[leb].
-  destruct (n <? m) eqn:eqna.
-  + rewrite svar.
-    rewrite eqna.
-    apply uvar.
-  + cbn -[leb].
-    rewrite sren.
-    erewrite sext; revgoals.
-    {
-      intro.
-      case(Nat.ltb_spec _ _).
-      + intro. exfalso. lia.
-      + intros. f_equal.
-        rewrite Nat.add_sub.
-        reflexivity.
-    }
-    symmetry.
-    apply rens.
-Qed.
-*)
-Fixpoint shiftₙₛ_natural
+
+Fixpoint derivₙₛ_natural
       {X : Type} (varX : nat -> X) (renX : (nat -> nat) -> (X -> X))
       {Y : Type} (varY : nat -> Y) (renY : (nat -> nat) -> (Y -> Y))
       (g : X -> Y)(gvar : forall n, g (varX n) = varY n)
         (gren : forall f x, g (renX f x) = renY f (g x))
       (n : nat) (f : nat -> X) x :
-  g (shiftₙₛ varX renX n f x) = shiftₙₛ varY renY n (fun n => g (f n)) x.
+  g (derivₙₛ varX renX n f x) = derivₙₛ varY renY n (fun n => g (f n)) x.
 Proof.
   destruct n as [|n].
   - reflexivity.
@@ -210,13 +179,13 @@ Proof.
     + etransitivity; revgoals.
       { 
       apply(f_equal (renY S)).
-      eapply (shiftₙₛ_natural _ varX renX) ; eassumption.
+      eapply (derivₙₛ_natural _ varX renX) ; eassumption.
       }
       apply gren.
 Qed.
 
-Lemma shiftₙ_id  (p : nat)(n : nat)  : 
-  shiftₙ n (fun x => x) p = p.
+Lemma derivₙ_id  (p : nat)(n : nat)  : 
+  derivₙ n (fun x => x) p = p.
   revert p.
   induction n.
   - reflexivity.
@@ -229,12 +198,12 @@ Lemma shiftₙ_id  (p : nat)(n : nat)  :
       apply IHn.
 Qed.
 
-Fixpoint shiftₙₛ_ext {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
+Fixpoint derivₙₛ_ext {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
       (ren_eq : forall f x, ren f x = ren' f x)
       (n : nat) (f g : nat -> X)
       p
       (fg_eq : forall q, q + n <= p -> f q = g q) { struct n}
-  : shiftₙₛ var ren n f p = shiftₙₛ var ren' n g p .
+  : derivₙₛ var ren n f p = derivₙₛ var ren' n g p .
 Proof.
   destruct n as [|n].
   - cbn.
@@ -247,34 +216,34 @@ Proof.
     + etransitivity.
       apply ren_eq.
       f_equal.
-      eapply (shiftₙₛ_ext).
+      eapply (derivₙₛ_ext).
       *  assumption.
       *  intros.
          apply fg_eq.
          lia.
 Qed.
 
-Lemma var_shiftₙ 
+Lemma var_derivₙ 
       {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))
       (eq_ren : forall f n, ren f (var n) = var (f n))
       (n : nat) (f : nat -> nat) (x : nat) :
-  var ((shiftₙ n f) x) = shiftₙₛ var ren n (fun p => var (f p)) x.
+  var ((derivₙ n f) x) = derivₙₛ var ren n (fun p => var (f p)) x.
 Proof.
-  apply shiftₙₛ_natural; auto.
+  apply derivₙₛ_natural; auto.
 Qed.
 
-Lemma shiftₙₛ_var {X : Type}(var : nat -> X)ren
+Lemma derivₙₛ_var {X : Type}(var : nat -> X)ren
       (eq_ren : forall f n, ren f (var n) = var (f n))
-      n m : shiftₙₛ var ren n var m = var m.
+      n m : derivₙₛ var ren n var m = var m.
 Proof.
-    unshelve erewrite <- (var_shiftₙ _ _ (fun n => n)).
+    unshelve erewrite <- (var_derivₙ _ _ (fun n => n)).
     + auto.
     + cbn.
       f_equal.
-      apply shiftₙ_id.
+      apply derivₙ_id.
 Qed.
 
-Lemma  subst_shiftₙₛ
+Lemma  subst_derivₙₛ
        {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))
        (s : (nat -> X) -> (X -> X))
        (* (uvar : forall f n, s f (var n) = var' n) *)
@@ -284,79 +253,85 @@ Lemma  subst_shiftₙₛ
        (* (sext : forall f g, (forall n, f n = g n) -> forall x, s f x = s g x) *)
        (n m : nat)
        (f : nat -> X) (g : nat -> X)   :
-  (s (shiftₙₛ var ren m f) (shiftₙₛ var ren m g n)) =
-  (shiftₙₛ var ren m (fun n0 : nat => s f (g n0)) n).
+  (s (derivₙₛ var ren m f) (derivₙₛ var ren m g n)) =
+  (derivₙₛ var ren m (fun n0 : nat => s f (g n0)) n).
 Proof.
-  apply (f_shiftₙₛ (u := id)); auto.
+  apply (s_deriv_deriv (u := id)); auto.
 Qed.
-Lemma shiftₙₛ_shiftₙ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n m : nat) (f : nat -> X)
+Lemma derivₙₛ_derivₙ {X : Type}(var : nat -> X)(ren : (nat -> nat) -> (X -> X))(n m : nat) (f : nat -> X)
       (g : nat -> nat) :
-  shiftₙₛ var ren n f (shiftₙ n g m) = shiftₙₛ var ren n (fun n0 : nat => f (g n0)) m.
+  derivₙₛ var ren n f (derivₙ n g m) = derivₙₛ var ren n (fun n0 : nat => f (g n0)) m.
 Proof.
-  apply (f_shiftₙₛ (s := id)(u := id)); auto.
+  apply (s_deriv_deriv (s := id)(u := id)); auto.
 Qed.
 
-Lemma ren_shiftₙ_shiftₙₛ 
+Lemma ren_derivₙ_derivₙₛ 
       {X : Type}
       (var : nat -> X)
       (ren : (nat -> nat) -> (X -> X))(m n : nat) (f : nat -> X)(g : nat -> nat)
       (eq_ren : forall f n, ren f (var n) = var (f n)) 
       (ren_ren : forall f g x, ren f (ren g x) = ren (fun n => f (g n)) x)  :
       (* (ren_ext : forall f g , (forall x, f x = g x) -> forall x, ren f x = ren g x) : *)
-  ren (shiftₙ n g) (shiftₙₛ var ren n f m) = shiftₙₛ var ren n (fun n0 : nat => ren g (f n0)) m.
+  ren (derivₙ n g) (derivₙₛ var ren n f m) = derivₙₛ var ren n (fun n0 : nat => ren g (f n0)) m.
   Proof.
-    eapply (f_shiftₙₛ ); auto.
+    eapply (s_deriv_deriv ); auto.
   Qed.
   
 
-Lemma shiftₛ_eq {X : Type}(var : nat -> X)
+Lemma derivₛ_eq {X : Type}(var : nat -> X)
       (ren : (nat -> nat) -> (X -> X))
       (s : (nat -> X) -> (X -> X))
       (ren_eq : forall f x, ren f x = s (var ∘ f) x)
       (n : nat) (f : nat -> X)
       p
-  : shiftₛ var s n f p = shiftₙₛ var ren n f p .
+  : derivₛ var s n f p = derivₙₛ var ren n f p .
 Proof.
-  apply shiftₙₛ_ext.
+  apply derivₙₛ_ext.
   - symmetry; apply ren_eq.
   - reflexivity.
 Qed.
 
-(** Renaming *)
-Fixpoint Z_ren {S : signature}  (f : nat -> nat) (x : Z S) {struct x} : Z S :=
-  match x with
-    Var _ n => Var _ (f n)
-  | Op op  v => Op op (Vec_map (fun n b => (Z_ren (shiftₙ n f) b))  v)
-  end.
 
 
 
-(** Substitution *)
-Fixpoint Z_subst {S : signature}  (f : nat -> Z S) (x : Z S) : Z S :=
-  match x with
-    Var _ n => f n
-  | Op op v => Op op
-                 (Vec_map 
-                    (fun n b =>
-                       (b [ shiftₙₛ (Var S) Z_ren n f ]ₛ)
-                    ) v)
-  end
-    where "t [ f ]ₛ" := (Z_subst f t).
 
-(* Instance Z_has_substitution (S : signature) : has_substitution (Z S) := Z_subst. *)
 
+(** * Models of a signature and their morphisms *)
+
+Section binding_condition.
+
+  Context
+    {X : Type}
+    (var : nat -> X)
+    (s : (nat -> X) -> X -> X).
+
+  (* Notations (local to this section) *)
+  Notation "x [ f ]" := (s f x).
+  Notation "f ^ ( n )" := (derivₛ var s n f).
+
+  Definition binding_condition
+           (a : list nat) (op : vec X a -> X) :=
+  forall (f : nat -> X)(v : vec X a),
+    op v [ f ] = op (vec_map (fun n x => x [ f ^ ( n )]) v).
+
+End binding_condition.
 
 Record model_data (S : signature) := 
   { carrier :> Type;
     variables : nat -> carrier;
-    ops : forall (o : O S), Vec carrier (ar o) -> carrier;
-    (* has_subst :> has_substitution carrier *)
+    ops : forall (o : O S), vec carrier (ar o) -> carrier;
     substitution : (nat -> carrier) -> (carrier -> carrier)
   }.
 
 Arguments ops [S m] o.
 Notation "x [ s ]" := (substitution s x).
-Notation "f ^ ( n )" := (shiftₛ (variables _) (substitution (m := _)) n f) (at level 30).
+Notation "f ^ ( n )" := (derivₛ (variables _) (substitution (m := _)) n f) .
+
+(* In every model of lambda calculus, we have an app and abs operation *)
+Definition app (m : model_data LC_sig) (a : m)(b : m) : m :=
+  ops (S := LC_sig) App (a :: b :: NilV)%v.
+Definition abs (m : model_data LC_sig)(a : m) : m :=
+  ops (S := LC_sig) Abs (a :: NilV)%v.
 
 Record is_model {S : signature}(m : model_data S) :=
   {
@@ -366,13 +341,9 @@ Record is_model {S : signature}(m : model_data S) :=
     variables_subst : forall x f, (variables m x) [ f ] = f x;
     (* operations are module morphisms *)
     ops_subst : 
-     forall (o : O S) (v : Vec m (ar o)) (f : nat -> m),
-          (ops o v) [ f ] =
-          ops o (Vec_map
-                        (fun n t =>
-                           t [ f ^ ( n ) ]
-                        )
-              v);
+      forall (o : O S), binding_condition (variables m) (substitution (m := m))
+                                     (ops o)
+              ;
     (* additionnal laws (not needed for initiality) : associativity of substitution *) 
     assoc : forall (f g : nat -> m) (x : m),
         x [ g ] [ f ] = x [ (fun n => (g n) [ f ]) ] ;
@@ -387,13 +358,12 @@ Record model (S : signature) :=
     mod_laws : is_model mod_carrier
   }.
 
-Arguments model S%signature_scope.
-
-Lemma shiftₙₛ_in_model {S}{X : model S}(f : nat -> X) n p :
+(** not used *)
+Lemma derivₙₛ_in_model {S}{X : model S}(f : nat -> X) n p :
       f ^(n) p = if p <? n then variables X p else f (p - n) [fun x => variables X (x + n)] .
 
 Proof.
-  apply shiftₙₛ_eq.
+  apply derivₙₛ_eq.
   - intros.
     apply substitution_ext; [apply mod_laws|].
     auto.
@@ -417,8 +387,8 @@ Record is_model_mor
     variables_mor : forall n, u (variables X n) = variables Y n ;
     substitution_mor : forall (f : nat -> X) (x : X), u (x [ f ]) =
                                               (u x) [ u ∘ f ];
-    ops_mor : forall (o : O S)(v : Vec X (ar o)), u (ops o v) =
-                                             ops o (Vec_map (fun _ => u) v)
+    ops_mor : forall (o : O S)(v : vec X (ar o)), u (ops o v) =
+                                             ops o (vec_map (fun _ => u) v)
   }.
 
 Record model_mor {S : signature} (X : model_data S) (Y : model_data S) :=
@@ -443,7 +413,28 @@ Proof.
 Qed.
 
 
-(* Z is a model *)
+(** * Syntax as a model *)
+
+(** Renaming *)
+Fixpoint Z_ren {S : signature}  (f : nat -> nat) (x : Z S) {struct x} : Z S :=
+  match x with
+    Var _ n => Var _ (f n)
+  | Op op  v => Op op (vec_map (fun n b => (Z_ren (derivₙ n f) b))  v)
+  end.
+
+
+
+(** Substitution *)
+Fixpoint Z_subst {S : signature}  (f : nat -> Z S) (x : Z S) : Z S :=
+  match x with
+    Var _ n => f n
+  | Op op v => Op op
+                 (vec_map 
+                    (fun n b =>
+                       (b [ derivₙₛ (Var S) Z_ren n f ]ₛ)
+                    ) v)
+  end
+    where "t [ f ]ₛ" := (Z_subst f t).
 
 Definition Z_model_data (S : signature) : model_data S :=
   {|
@@ -464,7 +455,7 @@ Proof.
     intros.
     apply Z_subst_ext.
     intro.
-    eapply shiftₙₛ_ext.
+    eapply derivₙₛ_ext.
     + reflexivity.
     + intros; apply eq.
 Defined.
@@ -482,7 +473,7 @@ Proof.
     cbn.
     apply Z_subst_ext.
     intro.
-    apply var_shiftₙ.
+    apply var_derivₙ.
     reflexivity.
 Qed.
 
@@ -507,7 +498,7 @@ Proof.
     etransitivity. 
     {  apply (substitution_ext s_laws).
        intro n.
-       etransitivity;[symmetry; apply var_shiftₙ|].
+       etransitivity;[symmetry; apply var_derivₙ|].
        intros.
        exact (variables_subst s_laws _ _).
        reflexivity.
@@ -536,7 +527,7 @@ Proof.
     apply (ZModel_unique_subst _ _ s_laws).
     apply Z_subst_ext.
     intro n.
-    apply shiftₙₛ_ext.
+    apply derivₙₛ_ext.
     + apply (ZModel_unique_ren s_laws).
     + reflexivity.
 Qed.
@@ -555,7 +546,7 @@ Proof.
     etransitivity;[apply Z_ren_subst|].
     apply Z_subst_ext.
     intro n.
-    apply shiftₙₛ_shiftₙ.
+    apply derivₙₛ_derivₙ.
 Qed.
 
 Lemma Z_ren_ren {S : signature} g f (z : Z S) :
@@ -567,8 +558,6 @@ Z_ren g (Z_ren f z) = Z_ren (g ∘ f) z.
 Qed.
 
 
-  (* Z_ren (shiftₙ a g) (shiftₙₛ (Var S) Z_ren a f n) = shiftₙₛ (Var S) Z_ren a (fun n0 : nat => Z_ren g (f n0)) n *)
-(* TODO: factoriser un principe de recurrence *)
 Fixpoint Z_subst_ren {S : signature} g f (z : Z S) :
 Z_ren g (z [ f ]ₛ) = z [ fun n => Z_ren g (f n)  ]ₛ.
 Proof.
@@ -583,7 +572,7 @@ Proof.
     etransitivity;[apply Z_subst_ren|].
     apply Z_subst_ext.
     intro n.
-    apply ren_shiftₙ_shiftₙₛ.
+    apply ren_derivₙ_derivₙₛ.
     + reflexivity.
     + intros. apply Z_ren_ren.
 Qed.
@@ -605,7 +594,7 @@ Proof.
     intro n.
     cbn.
     (* ca devrait marcher *)
-    apply subst_shiftₙₛ.
+    apply subst_derivₙₛ.
     + reflexivity.
     + intros. apply Z_ren_subst.
     + intros. apply Z_subst_ren.
@@ -617,13 +606,13 @@ Fixpoint Z_subst_id {S} (z : Z S) : z [Var S ]ₛ = z.
   - reflexivity.
   - cbn.
     f_equal.
-    etransitivity;[|apply Vec_map_id].
+    etransitivity;[|apply vec_map_id].
     apply vec_map_ext.
     intros.
     etransitivity;[|apply Z_subst_id].
     apply Z_subst_ext.
     intro n.
-    apply shiftₙₛ_var.
+    apply derivₙₛ_var.
     reflexivity.
 Qed.
   
@@ -640,7 +629,7 @@ Proof.
     apply Z_subst_ext.
     intro.
     symmetry.
-    apply shiftₛ_eq.
+    apply derivₛ_eq.
     intros.
     rewrite Z_ren_subst_eq.
     reflexivity.
@@ -652,16 +641,16 @@ Qed.
 Definition ZModel (S : signature) : model S :=
   {| mod_carrier := Z_model_data S; mod_laws := Z_model_laws S |}.
 
-(* the initial morphism *)
+(** * Initial morphism from the syntax *)
 
 Fixpoint ini_mor {S : signature} (m : model_data S )(x : Z S) : m :=
   match x with
         Var _ n => variables _ n
-      | Op o v   => ops o (Vec_map (fun _ => ini_mor m) v)
+      | Op o v   => ops o (vec_map (fun _ => ini_mor m) v)
   end.
 
 (* the initial morphism preserves renaming *)
-Fixpoint mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
+Fixpoint ini_mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
   ini_mor m (Z_ren f x) = (ini_mor m x) [ variables m ∘ f ].
   destruct x as [n|o v].
   - cbn.
@@ -678,12 +667,12 @@ Fixpoint mor_ren { S : signature}(m : model S)(f : nat -> nat) (x : Z S) :
       f_equal; revgoals.
       * exact IHv.
       * cbn -[leb].
-        rewrite mor_ren.
+        rewrite ini_mor_ren.
         cbn -[leb].
         apply (substitution_ext (mod_laws m)).
         intro n.
         unfold compose.
-        apply var_shiftₙ.
+        apply var_derivₙ.
         cbn.
         intros.
         rewrite (variables_subst (mod_laws m)).
@@ -692,7 +681,7 @@ Defined.
 
 
 (* the initial morphism preserves substitution *)
-Fixpoint mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
+Fixpoint ini_mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
   (* ini_mor m (x [ f ]ₛ) = (ini_mor m x) [fun y => ini_mor m (f y)]. *)
   ini_mor m (x [ f ]ₛ) = (ini_mor m x) [ ini_mor m ∘ f].
   destruct x as [n|o v].
@@ -709,21 +698,21 @@ Fixpoint mor_subst {S : signature}(m : model S)(f : nat -> Z S) (x : Z S) :
     + cbn -[leb].
       f_equal; revgoals.
       * exact IHv.
-      * rewrite mor_subst.
+      * rewrite ini_mor_subst.
         apply (substitution_ext (mod_laws m)).
         intro n.
         unfold compose.
-        apply shiftₙₛ_natural.
+        apply derivₙₛ_natural.
         -- reflexivity.
         -- intros.
-           apply mor_ren.
+           apply ini_mor_ren.
 Qed.
 
 
 Lemma ini_mor_is_model_mor {S : signature}(m : model S) : is_model_mor (X := ZModel S) (ini_mor m).
 Proof.
   split; auto.
-  apply mor_subst.
+  apply ini_mor_subst.
 Qed.
 
 Program Definition initial_morphism {S : signature}(m : model S) : model_mor (ZModel S) m :=

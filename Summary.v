@@ -35,9 +35,9 @@ Check (fun (O : Type)(ar : O -> list nat) =>
 the signature *)
 (** The two constructors: variables and operations *)
 Check (Var : forall S : signature, nat -> Z S).
-Check (Op : forall (S : signature) (o : O S), Vec (Z S) (ar (s:=S) o) -> Z S).
-(** Here, [Vec B l] is the type of lists that have same length as l *)
-Print Vec.
+Check (Op : forall (S : signature) (o : O S), vec (Z S) (ar (s:=S) o) -> Z S).
+(** Here, [vec B l] is the type of lists that have same length as l *)
+Print vec.
 
 Print Z.
 
@@ -48,7 +48,7 @@ Check ((fun (S : signature)
           (* with variables, substitution, and operations  *)
           (variables : nat -> X)
           (substitution : (nat -> X) -> X -> X) 
-          (ops : forall o : S.(O), Vec X (S.(@ar) o) -> X)
+          (ops : forall o : S.(O), vec X (S.(@ar) o) -> X)
         =>
                {| carrier := X;
                   variables := variables;
@@ -59,8 +59,8 @@ Check ((fun (S : signature)
       )).
 
 (** On the syntax, we define substitution by induction (we need
-actually to define renaming first because Coq would not understand
-the termination argument) *)
+actually to define renaming first because Coq does not accept
+readily termination) *)
 Print Z_subst.
 Check (fun (S : signature) => (Z_model_data S : model_data S)
                             ≡
@@ -84,9 +84,9 @@ Check (fun S (m : model_data S)
                it)
           *)
     (substitution_ext : forall f g : nat -> m, (forall n : nat, f n = g n) -> forall x : m, x [f] = x [g])
-    (* operations are compatible with the substitution *)
-    (ops_subst : forall (o : O S) (v : Vec m (ar (s:=S) o)) (f : nat -> m),
-                ops o v [f] = ops o (Vec_map (fun (n : nat) (t : m) => t [f ^(n)]) v))
+    (* operations are compatible with the substitution (see below) *)
+    (ops_subst : forall (o : O S),
+        binding_condition (variables m)(substitution (m := m)) (ops o)) 
     (* monadic laws *)
     (variables_subst : forall (x : nat) (f : nat -> m), variables m x [f] = f x)
     (assoc : forall (f g : nat -> m) (x : m), (x [g]) [f] = x [fun n : nat => g n [f]])
@@ -100,7 +100,18 @@ Check (fun S (m : model_data S)
   : is_model m
       ).
 
-(** where [f ^(n)] is defined as *)
+(** It is indeed the case of the syntax *)
+Check (Z_model_laws : forall (S : signature), is_model (Z_model_data S)).
+
+(** The binding condition is compatibility of the operation with
+ substitution*)
+Check (
+    fun S (m : model_data S) (o : O S) =>
+      binding_condition (variables m)(substitution (m := m)) (ops o)
+    ≡ forall (f : nat -> m)(v : vec m (ar (s:=S) o)),
+          ops o v [f] = ops o (vec_map (fun (n : nat) (t : m) => t [f ^(n)]) v)).
+
+(** [f ^ ( n )] is defined as *)
 Check (
     fun S (m : model_data S) (f : nat -> m)(n  : nat) =>
       f^( n ) ≡ Nat.iter n 
@@ -112,8 +123,6 @@ Check (
               ) f
   ).
 
-(** It is indeed the case of the initial model *)
-Check (Z_model_laws : forall (S : signature), is_model (Z_model_data S)).
 
 (** Morphisms of models *)
 Check (fun  
@@ -124,8 +133,8 @@ with variables, substitution, and operations *)
     (variables_mor : forall n, u (variables X n) = variables Y n )
     (substitution_mor : forall (f : nat -> X) (x : X), u (x [ f ]) =
                                               (u x) [ fun x => u (f x) ])
-    (ops_mor : forall (o : O S)(v : Vec X (ar o)), u (ops o v) =
-                                             ops o (Vec_map (fun _ => u) v))
+    (ops_mor : forall (o : O S)(v : vec X (ar o)), u (ops o v) =
+                                             ops o (vec_map (fun _ => u) v))
     =>
     {| variables_mor := variables_mor ;
        substitution_mor := substitution_mor ;
@@ -137,7 +146,7 @@ Check (@ini_mor ≡
   fix ini_mor (S : signature) (m : model_data S) (x : Z S) {struct x} : m :=
          match x with
          | Var _ n => variables m n
-         | Op o v => ops o (Vec_map (fun _ : nat => ini_mor S m) v)
+         | Op o v => ops o (vec_map (fun _ : nat => ini_mor S m) v)
   end).
 
 (** It indeed induces a model morphism *)
@@ -169,20 +178,18 @@ of the equation) *)
 Check  (fun (S : signature)(V : signature) 
      (** To each model m of S, it assigns a m-term parameterized
       by a vector of metavariables *)
-    (lift_ops : forall (m : model S), forall (o : O V), Vec m (ar o) -> m)
+    (lift_ops : forall (m : model S), forall (o : O V), vec m (ar o) -> m)
     (** This assignment ought to be compatible with the equations *)
     (lift_ops_subst :
-       forall (m : model S) (o : O V) (v : Vec m (ar o)) (f : nat -> m),
-         (lift_ops m o v) [ f ] =
-         lift_ops m o (Vec_map
-                         (fun n t => t [ f^(n) ])
-                         v))
+      forall (m : model S) (o : O V),
+        binding_condition (variables m) (substitution (m := m))
+                          (@lift_ops m o))
     (** It should also be natural in the model, i.e., commutes
        with model morphisms *)
     (lift_ops_natural :
        forall (m1 m2 : model S) (f : model_mor m1 m2)
-         (o : O V)(v : Vec m1 (ar o)),
-         lift_ops m2 o (Vec_map (fun _ => f) v)  = f (lift_ops m1 o v))
+         (o : O V)(v : vec m1 (ar o)),
+         lift_ops m2 o (vec_map (fun _ => f) v)  = f (lift_ops m1 o v))
     =>
   {|
     lift_ops := lift_ops ;
@@ -210,7 +217,7 @@ Check  (fun (S : signature)(V : signature)
 Check  (fun (E : equational_theory)
           (m : model E.(main_signature))
           (model_eq : forall (o : O (metavariables E))
-                        (v : Vec m (ar (s:=metavariables E) o)),
+                        (v : vec m (ar (s:=metavariables E) o)),
               left_handside E m o v = right_handside E m o v )
 => {| main_model := m ;
      model_eq := model_eq |}
@@ -226,7 +233,7 @@ on the initial model of its main signature, with the the following constructors:
 Check (@eqE 
         : forall (E : equational_theory)
             (o : O (metavariables E))
-         (v : Vec (ZModel (main_signature E)) (ar (s:=metavariables E) o)),
+         (v : vec (ZModel (main_signature E)) (ar (s:=metavariables E) o)),
           rel_Z (E:=E)
                 (left_handside E (ZModel (main_signature E)) o v)
                 (right_handside E (ZModel (main_signature E)) o v)).
@@ -235,7 +242,7 @@ Check (reflE : forall E z, @rel_Z E z z).
 Check (symE : forall E a b, @rel_Z E b a -> rel_Z a b).
 Check (transE : forall E a b c, rel_Z (E := E) a b -> rel_Z b c -> rel_Z a c).
 (** and congruence *)
-Check (congrE : forall E (o : O (main_signature E)) (v v' : Vec _ (ar o)),
+Check (congrE : forall E (o : O (main_signature E)) (v v' : vec _ (ar o)),
     rel_vec (@rel_Z E)  v v' -> rel_Z (Op o v) (Op o v')).
 
 Print rel_Z.

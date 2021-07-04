@@ -1,3 +1,9 @@
+(**
+Contents (with the example of lambda-calculus modulo β and η)
+- Equational theory and models
+- Syntax for an equational theory (as a quotient)
+- Initiality of this syntax
+*)
 
 Require Import Arith.
 Require Import Basics.
@@ -22,16 +28,14 @@ Reserved Notation "x ⟦ s ⟧" (at level 30).
 
 Record half_equation (S1 : signature)(S2 : signature) :=
   {
-    lift_ops :> forall (m : model S1), forall (o : O S2), Vec m (ar o) -> m;
+    lift_ops :> forall (m : model S1), forall (o : O S2), vec m (ar o) -> m;
     lift_ops_subst :
-           forall (m : model S1) (o : O S2) (v : Vec m (ar o)) (f : nat -> m),
-          (lift_ops (o := o) v) [ f ] =
-          lift_ops (o := o) (Vec_map
-                        (fun n t => t [ f ^(n) ])
-              v) ;
+      forall (m : model S1) (o : O S2),
+        binding_condition (variables m) (substitution (m := m))
+                          (@lift_ops m o) ;
     lift_ops_natural : forall (m1 m2 : model S1) (f : model_mor m1 m2)
-                         (o : O S2)(v : Vec m1 (ar o)),
-        lift_ops (Vec_map (fun _ => f) v)  = f (lift_ops v)
+                         (o : O S2)(v : vec m1 (ar o)),
+        lift_ops (vec_map (fun _ => f) v)  = f (lift_ops v)
                 
   }.
 
@@ -44,21 +48,158 @@ Record equational_theory :=
     right_handside : half_equation main_signature metavariables 
   }.
 
+Inductive LCβη_metavariables_O := Beta | Eta.
+Definition LCβη_metavariables : signature :=
+  {|
+    O := LCβη_metavariables_O ;
+    ar := fun o => match o with
+                  Beta =>
+                  (* two metavariables in (λx) y = x[y],
+                     with x binding a variable *)
+                    1 :: 0 :: nil 
+                | Eta => 0 :: nil
+                  (* one metavariable: t = (λ(t[n ↦ n+1] 0) *)
+                end
+  |}.
+
+
+
+Definition LCβη_left_handside_data (m : model LC_sig)(o : LCβη_metavariables_O)
+  : vec m (ar (s := LCβη_metavariables) o) -> m :=
+  match o with
+    Beta => fun v =>
+             let x := vec_hd v in
+             let y := vec_hd (vec_tl v) in
+             app (abs x) y
+  | Eta => fun v => vec_hd v
+  end.
+
+Definition LCβη_right_handside_data (m : model LC_sig)(o : LCβη_metavariables_O)
+  : vec m (ar (s := LCβη_metavariables) o) -> m :=
+  match o with
+    Beta => fun v =>
+             let x := vec_hd v in
+             let y := vec_hd (vec_tl v) in
+             x [ fun n => match n with 0 => y | S p => variables m p end ]
+  | Eta => fun v =>
+            let t := vec_hd v in
+            (abs (app (t [ fun n => variables m (1 + n) ]) (variables m 0)))
+  end.
+
+
+Program Definition LCβη_sig : equational_theory :=
+  {|
+  main_signature := LC_sig;
+  metavariables := LCβη_metavariables ;
+  left_handside :=
+    {|
+      lift_ops := LCβη_left_handside_data
+    |} ;
+  right_handside :=
+    {|
+      lift_ops := LCβη_right_handside_data
+    |} ;
+
+  |}.
+
+Next Obligation .
+  red.
+  destruct o; cbn;intros f v.
+  -  rewrite vec_tl_map, !vec_hd_map.
+     unfold app, abs.
+     do 2 (rewrite (ops_subst (mod_laws m)); cbn).
+     reflexivity.
+  - rewrite vec_hd_map.
+    reflexivity.
+Qed.
+Next Obligation.
+  destruct o; cbn.
+  - rewrite vec_tl_map, !vec_hd_map.
+    unfold app, abs.
+    do 2 (rewrite (ops_mor (mor_laws f)); cbn).
+    reflexivity.
+  - rewrite vec_hd_map.
+    reflexivity.
+Qed.
+Next Obligation .
+  red.
+  destruct o; cbn;intros f v.
+  -  rewrite vec_tl_map, !vec_hd_map.
+     do 2 rewrite (assoc (mod_laws m)); cbn.
+     apply (substitution_ext (mod_laws m)).
+     intro n.
+     destruct n; cbn.
+     + rewrite (variables_subst (mod_laws m)).
+       reflexivity.
+     + rewrite (variables_subst (mod_laws m)).
+       rewrite (assoc (mod_laws m)); cbn.
+       etransitivity.
+       symmetry; apply (id_neutral (mod_laws m)).
+       apply (substitution_ext (mod_laws m)).
+       intro p.
+       rewrite (variables_subst (mod_laws m)).
+       reflexivity.
+  - rewrite !vec_hd_map.
+    unfold app, abs.
+     do 2 (rewrite (ops_subst (mod_laws m)); cbn).
+     rewrite (variables_subst (mod_laws m)).
+     cbn.
+     f_equal.
+     f_equal.
+     f_equal.
+     f_equal.
+     do 2 rewrite (assoc (mod_laws m)); cbn.
+     apply (substitution_ext (mod_laws m)).
+     intro n.
+     destruct n; cbn.
+     + rewrite (variables_subst (mod_laws m)).
+       reflexivity.
+     + rewrite (variables_subst (mod_laws m)).
+       reflexivity.
+Qed.
+Next Obligation.
+
+  destruct o; cbn.
+  - rewrite vec_tl_map, !vec_hd_map.
+    rewrite (substitution_mor (mor_laws f)); cbn.
+    apply (substitution_ext (mod_laws _)).
+    unfold compose.
+    intro n.
+     destruct n; cbn.
+     + reflexivity.
+     + rewrite (variables_mor (mor_laws _)).
+       reflexivity.
+  - rewrite !vec_hd_map.
+    unfold app, abs.
+    do 2 (rewrite (ops_mor (mor_laws f)); cbn).
+    rewrite (variables_mor (mor_laws _)).
+    f_equal.
+    f_equal.
+    f_equal.
+    f_equal.
+    rewrite (substitution_mor (mor_laws f)); cbn.
+    apply (substitution_ext (mod_laws _)).
+    unfold compose.
+    auto using (variables_mor (mor_laws _)).
+Qed.
+
+
 Record model_equational (E : equational_theory) :=
   { main_model :> model (main_signature E) ;
-    model_eq : forall o (v : Vec main_model (ar o)),
+    model_eq : forall o (v : vec main_model (ar o)),
         left_handside E main_model o v = right_handside E main_model o v
   }.
 
+Section LC_βη.
+End LC_βη.
 
-
-
+(** Equivalence relation on the main signature of an equational theory *)
 Inductive rel_Z (E : equational_theory) : Z (main_signature E) -> Z (main_signature E) -> Prop :=
 | eqE : forall o v, rel_Z (left_handside E (ZModel _) o v) (right_handside E (ZModel _) o v) 
 | reflE : forall z, rel_Z z z
 | symE : forall a b, rel_Z b a -> rel_Z a b
 | transE : forall a b c, rel_Z a b -> rel_Z b c -> rel_Z a c
-| congrE : forall (o : O (main_signature E)) (v v' : Vec _ (ar o)),
+| congrE : forall (o : O (main_signature E)) (v v' : vec _ (ar o)),
     rel_vec (@rel_Z E)  v v' -> rel_Z (Op o v) (Op o v').
 
 
@@ -67,12 +208,13 @@ Definition ZEr (E : equational_theory) : Eqv (Z (main_signature E)) :=
   Build_Eqv (@rel_Z E) (@reflE E) (@symE E)(@transE E) .
 
 
+(** Syntax for a quotiented signature *)
 Definition ZE(E : equational_theory) := Z (main_signature E) // (ZEr E).
 
 Definition  projE{E : equational_theory} (z : Z (main_signature E)) : ZE E :=
   z / ZEr E.
 
-Definition ZE_ops (E : equational_theory) (o : O (main_signature E)) (v : Vec (ZE E) (ar o)) :
+Definition ZE_ops (E : equational_theory) (o : O (main_signature E)) (v : vec (ZE E) (ar o)) :
   ZE E.
   revert v.
   unshelve eapply (vec_quot_out).
@@ -89,8 +231,8 @@ Definition ZE_ops (E : equational_theory) (o : O (main_signature E)) (v : Vec (Z
 Defined.
 
 Lemma ZE_ops_projE (E : equational_theory)
-       (o : O (main_signature E)) (v : Vec (Z (main_signature E)) (ar o)) :
-  ZE_ops (Vec_map (fun _ => projE) v) = projE (Op o v).
+       (o : O (main_signature E)) (v : vec (Z (main_signature E)) (ar o)) :
+  ZE_ops (vec_map (fun _ => projE) v) = projE (Op o v).
 
 Proof.
   apply vec_quot_out_proj.
@@ -98,7 +240,7 @@ Qed.
 
 Lemma lift_ops_Z_ren {S V : signature} (h : half_equation S V)
    (f : nat -> nat) (o : O V) v :
-  Z_ren f (h (ZModel S) o v) = h (ZModel S) o (Vec_map (fun n t => Z_ren (shiftₙ n f) t) v).
+  Z_ren f (h (ZModel S) o v) = h (ZModel S) o (vec_map (fun n t => Z_ren (derivₙ n f) t) v).
 Proof.
   etransitivity ; [apply Z_ren_subst_eq|].
   etransitivity ; [apply (lift_ops_subst _ (m := ZModel _) )|].
@@ -110,7 +252,7 @@ Proof.
   apply Z_subst_ext.
   intro n.
   cbn.
-  apply var_shiftₙ.
+  apply var_derivₙ.
   reflexivity.
 Qed.
 
@@ -158,16 +300,16 @@ Fixpoint ZE_mixed_subst {E : equational_theory}
   match z with
     Var _ n => f n
   | Op op v => ZE_ops 
-                 (Vec_map 
+                 (vec_map 
                     (fun n x =>
-                       x ⟦ shiftₙₛ VarE ZE_ren n f ⟧
+                       x ⟦ derivₙₛ VarE ZE_ren n f ⟧
                     ) v)
   end where "t ⟦ s ⟧" := (ZE_mixed_subst s t).
 
 Fixpoint max_fv {S : signature} (z : Z S) : nat :=
   match z with
     Var _ n => n
-  | Op op  v => vec_max (Vec_map (fun n x => n + max_fv x) v)
+  | Op op  v => vec_max (vec_map (fun n x => n + max_fv x) v)
   end.
 
 Fixpoint ZE_mixed_subst_ext {E} (f g : nat -> ZE E)(z : Z _)
@@ -190,7 +332,7 @@ Proof.
       f_equal.
       * apply ZE_mixed_subst_ext.
         intros.
-        apply shiftₙₛ_ext.
+        apply derivₙₛ_ext.
         reflexivity.
         intros.
         apply hfg.
@@ -220,7 +362,7 @@ Proof.
     apply ZE_mixed_subst_ext.
     intros m hm.
     unfold compose.
-    apply shiftₙₛ_natural.
+    apply derivₙₛ_natural.
     + reflexivity.
     + cbn.
       apply ZE_ren_proj.
@@ -247,13 +389,13 @@ Proof.
       etransitivity.
       {
         apply (f_equal projE).
-        apply  (lift_ops_subst _ (m := ZModel _) v h).
+        apply  (lift_ops_subst _ (m := ZModel _) h v).
       }
       etransitivity;revgoals.
       {
         symmetry.
         apply (f_equal projE).
-        apply  (lift_ops_subst _ (m := ZModel _) v h).
+        apply  (lift_ops_subst _ (m := ZModel _) h v).
       }
       apply class_eq.
       constructor.
@@ -325,22 +467,18 @@ Proof.
   rewrite factorize.
   reflexivity.
 Qed.
-Lemma shiftₛ_projE {E} n f x :
-  shiftₛ (VarE (E := E)) ZE_subst n (projE ∘ f) x =
-  projE (shiftₛ (Var _) Z_subst n f x).
+Lemma derivₛ_projE {E} n f x :
+  derivₛ (VarE (E := E)) ZE_subst n (projE ∘ f) x =
+  projE (derivₛ (Var _) Z_subst n f x).
 Proof.
   symmetry.
-  apply (shiftₙₛ_natural (g:= projE)).
+  apply (derivₙₛ_natural (g:= projE)).
   - reflexivity.
   - intros g z.
     symmetry.
     apply ZE_subst_proj_proj.
 Qed.
 
-(* Lemma projE_subst_max_fv {E} *)
-(*       (f g : nat -> ZE E)(z : Z _) *)
-(*          (hfg : forall n, n <= max_fv z -> f n = g n) : *)
-(*   projE z [f ]ₘ = projE z [f ]ₘ *)
 Lemma ZE_ren_subst_eq {E} (f : nat -> nat) (x : ZE E) :
   ZE_ren f x = x [ fun n => VarE (f n) ]ₘ.
 Proof.
@@ -357,8 +495,8 @@ Proof.
 Qed.
 
 Lemma ZE_ops_ren
-  {E : equational_theory} (o : O (main_signature E)) (v : Vec (ZE E) (ar o)) (f : nat -> nat) :
-    ZE_ren f (ZE_ops v) = ZE_ops (Vec_map (fun (n : nat) (t : ZE E) => ZE_ren (shiftₙ n f) t) v).
+  {E : equational_theory} (o : O (main_signature E)) (v : vec (ZE E) (ar o)) (f : nat -> nat) :
+    ZE_ren f (ZE_ops v) = ZE_ops (vec_map (fun (n : nat) (t : ZE E) => ZE_ren (derivₙ n f) t) v).
 Proof.
   revert v.
   refine (vec_quot_ind _ _).
@@ -377,8 +515,8 @@ Proof.
 Qed.
 
 Lemma ZE_ops_subst
-  {E : equational_theory} (o : O (main_signature E)) (v : Vec (ZE E) (ar o)) (f : nat -> ZE E) :
-    ZE_ops v [f ]ₘ = ZE_ops (Vec_map (fun (n : nat) (t : ZE E) => t [shiftₛ VarE ZE_subst n f ]ₘ) v).
+  {E : equational_theory} (o : O (main_signature E)) (f : nat -> ZE E)(v : vec (ZE E) (ar o))  :
+    ZE_ops v [f ]ₘ = ZE_ops (vec_map (fun (n : nat) (t : ZE E) => t [derivₛ VarE ZE_subst n f ]ₘ) v).
 Proof.
   revert v.
   refine (vec_quot_ind _ _).
@@ -395,7 +533,7 @@ Proof.
   apply ZE_subst_proj.
   apply ZE_mixed_subst_ext.
   intros n hn.
-  apply shiftₙₛ_ext.
+  apply derivₙₛ_ext.
   -  intros. symmetry. 
      apply ZE_ren_subst_eq.
   - reflexivity.
@@ -424,7 +562,7 @@ Proof.
     etransitivity;[apply ZE_ren_mixed_subst|].
     apply ZE_mixed_subst_ext.
     intros n hn.
-    apply shiftₙₛ_shiftₙ.
+    apply derivₙₛ_derivₙ.
 Qed.
 
 Lemma ZE_ren_subst {E} (g : nat -> nat) (f : nat -> ZE E) (z : ZE E) :
@@ -462,7 +600,7 @@ Proof.
     { apply ZE_mixed_subst_ren. }
     apply ZE_mixed_subst_ext.
     intros n hn.
-    apply ren_shiftₙ_shiftₙₛ.
+    apply ren_derivₙ_derivₙₛ.
     + intros; apply ZE_ren_var.
     + intros; apply ZE_ren_ren.
 Qed.
@@ -499,11 +637,11 @@ Proof.
     {
     apply ZE_subst_ext.
     intro.
-    apply (shiftₛ_eq (ren := ZE_ren)).
+    apply (derivₛ_eq (ren := ZE_ren)).
     apply ZE_ren_subst_eq.
     }
     cbn.
-    eapply subst_shiftₙₛ.
+    eapply subst_derivₙₛ.
     + intros; apply ZE_subst_var.
     + intros; apply ZE_ren_subst.
     + intros; apply ZE_subst_ren.
@@ -534,7 +672,7 @@ Proof.
     etransitivity;[|apply ZE_mixed_subst_id].
     apply ZE_mixed_subst_ext.
     intros m hm.
-    apply shiftₙₛ_var.
+    apply derivₙₛ_var.
     apply ZE_ren_var.
 Qed.
 
@@ -574,7 +712,7 @@ Definition projE_mor {E} : model_mor (ZModel _) (ZEModel E) :=
 Lemma ZE_model_eq 
   (E : equational_theory)
   (o : O (metavariables E))
-  (v : Vec (ZE E) (ar o))
+  (v : vec (ZE E) (ar o))
   : 
   left_handside E (ZEModel E) o v = right_handside E (ZEModel E) o v.
 Proof.
@@ -623,9 +761,6 @@ Proof.
   apply factorize.
 Qed.
 
-(*
-Proof similar to ZE_mixed_subst_max_fv
- *)
 Fixpoint ini_mor_subst_ext {S : signature}(m : model S)(z : Z S)(f g : nat -> m)
   (fgeq: forall n, n <= max_fv z -> f n = g n) {struct z} : ini_mor m z [ f ] = 
                                          ini_mor m z [ g ].
@@ -649,7 +784,7 @@ Proof.
       f_equal.
       * apply ini_mor_subst_ext.
         intros.
-        apply shiftₙₛ_ext.
+        apply derivₙₛ_ext.
         -- reflexivity.
         -- intros.
            apply fgeq.
@@ -703,7 +838,7 @@ Proof.
         apply ini_morE_proj.
       }
       etransitivity; [apply ini_morE_proj|].
-      apply mor_subst.
+      apply ini_mor_subst.
   - intros.
     cbn.
     revert v.
