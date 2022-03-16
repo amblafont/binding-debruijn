@@ -198,29 +198,44 @@ Lemma derivₙ_id  (p : nat)(n : nat)  :
       apply IHn.
 Qed.
 
-Fixpoint derivₙₛ_ext {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
+Fixpoint derivₙₛ_ext_exact {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
       (ren_eq : forall f x, ren f x = ren' f x)
       (n : nat) (f g : nat -> X)
       p
-      (fg_eq : forall q, q + n <= p -> f q = g q) { struct n}
+      (fg_eq : p >= n ->  f (p - n) = g (p - n))
+      { struct n}
   : derivₙₛ var ren n f p = derivₙₛ var ren' n g p .
 Proof.
   destruct n as [|n].
   - cbn.
+    rewrite <- minus_n_O in fg_eq.
     apply fg_eq.
-    rewrite plus_n_O.
-    reflexivity.
+    lia.
   - cbn.
     destruct p; cbn.
     + reflexivity.
     + etransitivity.
       apply ren_eq.
       f_equal.
-      eapply (derivₙₛ_ext).
+      eapply (derivₙₛ_ext_exact).
       *  assumption.
       *  intros.
          apply fg_eq.
          lia.
+Qed.
+
+Lemma derivₙₛ_ext {X : Type}(var : nat -> X)(ren ren' : (nat -> nat) -> (X -> X))
+      (ren_eq : forall f x, ren f x = ren' f x)
+      (n : nat) (f g : nat -> X)
+      p
+      (fg_eq : forall q, q + n <= p -> f q = g q) 
+  : derivₙₛ var ren n f p = derivₙₛ var ren' n g p .
+Proof.
+  apply derivₙₛ_ext_exact.
+  assumption.
+  intros.
+  apply fg_eq.
+  lia.
 Qed.
 
 Lemma var_derivₙ 
